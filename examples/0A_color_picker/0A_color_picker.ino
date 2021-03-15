@@ -26,7 +26,7 @@ enum {
   HSV_NUM,
 };
 
-const uint16_t USER_FW_VER = 0x000C;
+const uint16_t USER_FW_VER = 0x000D;
 const uint32_t BRANCH_TYPE = 0x0000000A;  // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
@@ -51,7 +51,7 @@ uint8_t light[] = {
 static const long h_in[COLORS] = {
   0,
   31,
-  63,
+  51,
   95,
   198,
   224,
