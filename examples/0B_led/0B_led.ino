@@ -27,7 +27,7 @@
 #define LED_B_PIN       (9)
 #endif
 
-const uint16_t USER_FW_VER = 0x000E;
+const uint16_t USER_FW_VER = 0x000F;
 const uint32_t BRANCH_TYPE = 0x0000000B;  // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
@@ -154,6 +154,4 @@ void loop() {
     analogWrite_(LED_G_PIN, led_g);
     analogWrite_(LED_B_PIN, led_b);
   }
-
-  Vivicore.flush();
 }

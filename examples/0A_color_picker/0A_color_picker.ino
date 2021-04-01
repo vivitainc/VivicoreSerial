@@ -5,7 +5,8 @@
 #define MAX_HUE       (359)
 #define MAX_SAT       (255)
 #define MAX_VAL       (255)
-#define MAX_LIGHT     (255)
+#define LIGHT_FACTOR  (10)
+#define MAX_LIGHT     (255 * LIGHT_FACTOR)
 #define DEFAULT_LIGHT (MAX_LIGHT * 3 / 10)
 #define VCC_HZ        (32 * 1000)
 #define COLORS        (8 + 2)  // Color number + origin + end point
@@ -26,7 +27,7 @@ enum {
   HSV_NUM,
 };
 
-const uint16_t USER_FW_VER = 0x000D;
+const uint16_t USER_FW_VER = 0x000F;
 const uint32_t BRANCH_TYPE = 0x0000000A;  // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
@@ -82,14 +83,16 @@ static inline float mapf(
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
 
-static inline void analogWriteToLed(const uint8_t value) {
+static inline void analogWriteToLed(const uint16_t value) {
   if (value == 0) {
     digitalWrite(LED_PIN, LOW);
   } else if (value == MAX_LIGHT) {
     digitalWrite(LED_PIN, HIGH);
   } else {
+    // uint8_t rawVal = (uint8_t)roundf((float)value / (float)LIGHT_FACTOR); // More accurate
+    uint8_t rawVal = (uint8_t)(value / LIGHT_FACTOR);
     bitSet(TCCR2A, COM2B1);
-    OCR2B = value;
+    OCR2B = rawVal;
   }
 }
 
@@ -207,14 +210,14 @@ static inline void controlLed(void) {
       light_ = light[i++];
       light_ <<= 8;
       light_ |= light[i++];
+
+      analogWriteToLed((uint16_t)light_);
+
+      DebugPlainPrint0("led:");
+      DebugPlainPrint0(light_);
+      DebugPlainPrintln0("");
     }
-
-    analogWriteToLed((uint8_t)light_);
   }
-
-  DebugPlainPrint0("led:");
-  DebugPlainPrint0(light_);
-  DebugPlainPrintln0("");
 }
 
 void setup() {

@@ -444,13 +444,13 @@ BranchCommandRes_t VivicoreSerial::processCommand(const BranchCommand_t cmd) {
     break;
   case BCMD_DISCOVERY:
     if (my_branch_id == 0x00) {
-      // Only if 1st DISCOVERY
+      DebugStringPrintln0("Only if 1st DISCOVERY");
       my_branch_id = cmd_params[0];
     } else if (my_branch_id == cmd_params[0]) {
       DebugStringPrintln0("Reset to STEP_DISCOVERY");
       flag_readpoll_ = 0;
       is_dcdt_ok = false;
-      send_flag = false;
+      //send_flag = false;  // Keep TX data set b/w 1st and another discovery
     }
     ret = BCMDRES_DISCOVERY_ACK;
     break;
@@ -578,6 +578,8 @@ void VivicoreSerial::sendResponse(const BranchCommand_t bcmd, const BranchComman
   data_pkt encodedBuff = {0};
   uint8_t buf_index = 0;
   bool has_nature_in = false;
+  bool ini_in_range = true;
+  bool has_override_ini = false;
 
   data_response[buf_index++] = STX;   // STX
   data_response[buf_index++] = 0;     // Dummy DATA LENGTH
@@ -678,9 +680,18 @@ void VivicoreSerial::sendResponse(const BranchCommand_t bcmd, const BranchComman
       encoding_array[i] = static_cast<uint16_t>(dcInfo_[i].data_ini);
       if (dcInfo_[i].data_nature == DC_NATURE_IN) {
         has_nature_in = true;
+        if ((dcInfo_[i].data_ini < dcInfo_[i].data_min) ||
+            (dcInfo_[i].data_max < dcInfo_[i].data_ini)) {
+          ini_in_range = false;
+        }
+      }
+      if (overrideIni[i].set) {
+        has_override_ini = true;
+        encoding_array[i] = static_cast<uint16_t>(overrideIni[i].data_ini);
       }
     }
-    if (has_nature_in && ini_in_range) {
+
+    if ((has_nature_in && ini_in_range) || has_override_ini) {
       madeBuffer = makebuffer(encoding_array, _dc_size, _num_dc);
       encodedBuff = dcdtencoder(madeBuffer.data, madeBuffer.datalen, _dc_size, _num_dc);
       pkt_payload_len = encodedBuff.datalen;
@@ -1034,15 +1045,6 @@ void VivicoreSerial::begin(const uint32_t brType, const uint16_t nVer,
 
   assignSize(s_dc_info, nNum_dc); // Make _dc_size array
 
-  for (int i = 0; i < nNum_dc; i++) {
-    if ((s_dc_info[i].data_ini < s_dc_info[i].data_min) ||
-        (s_dc_info[i].data_max < s_dc_info[i].data_ini)) {
-      ini_in_range = false;
-      fatal_mode_ = true;
-      break;
-    }
-  }
-
   DebugGPIODirectOut(DDRB, 1); // debug D9 PB1
   DebugGPIODirectOut(DDRB, 2); // debug D10 PB2
   DebugGPIODirectOut(DDRB, 5); // debug D13 PB5
@@ -1298,6 +1300,18 @@ void VivicoreSerial::setSyncBreak(void) {
   sbi(*_ucsrb, _txen);
   sbi(*_ucsrb, _rxcie);
   DebugGPIOLow(PORTC, 5); // debug A5 PC5
+}
+
+void VivicoreSerial::setOverrideIni(const uint8_t dc_idx, const int16_t val,
+                                    const dcInfo_t *s_dc_info, const uint8_t nNum_dc) {
+  // dc_idx should start from 1
+  if (dc_idx > 0 && dc_idx <= nNum_dc) {
+    const uint8_t i = dc_idx - 1;
+    if (val >= s_dc_info[i].data_min && val <= s_dc_info[i].data_max) {
+      overrideIni[i].set = true;
+      overrideIni[i].data_ini = val;
+    }
+  }
 }
 
 size_t VivicoreSerial::pushToTxRingBuff(const uint8_t c) {

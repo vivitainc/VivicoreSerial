@@ -123,6 +123,11 @@ typedef struct {
   int16_t data_ini;
 } dcInfo_t;
 
+typedef struct {
+  bool set;
+  int16_t data_ini;
+} overrideIni_t;
+
 typedef enum {
   eRawData = 0,
   eDcdt
@@ -181,6 +186,7 @@ public:
   uint8_t* assignSize(const dcInfo_t *sDcInfo, const uint8_t &num_dc);
   void clearTransmitting(void);
   void setSyncBreakReceived(void);
+  void setOverrideIni(const uint8_t dc_idx, const int16_t val, const dcInfo_t *s_dc_info, const uint8_t nNum_dc);
 
   volatile uint8_t *_ubrrh; // USART baudrate register high
   volatile uint8_t *_ubrrl; // USART baudrate register low
@@ -212,8 +218,8 @@ private:
 
   uint8_t _num_dc;
   dcInfo_t dcInfo_[NUM_MAX_DC] = {};
+  overrideIni_t overrideIni[NUM_MAX_DC] = {};
   uint8_t _dc_size[NUM_MAX_DC] = {};
-  bool ini_in_range = true;
   bool dominate_led = false;
 
   uint16_t read_data_remaining_;
