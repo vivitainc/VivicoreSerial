@@ -46,7 +46,7 @@ This instruction describes how to setup Arduino IDE to build VIVIWARE Cell Custo
     - For Windows, **use Windows Installer exe file but not zip file**
     - On Board Manager in Arduino IDE, **do not update built-in packages (e.g. Arduino AVR Boards)** to avoid unexpected built result mismatch. Use default build-in packages bundled with the required Arduino IDE version.
 2. Open `Preferences` of Arduino IDE.
-3. Add URL `https://raw.githubusercontent.com/vivitainc/custom_cell_boards/master/package_vivita_index.json` into `Additional Boards Manager URLs` text box, and press `OK` button.
+3. Add URL `https://raw.githubusercontent.com/vivitainc/custom_cell_boards/master/package_viviware_index.json` into `Additional Boards Manager URLs` text box, and press `OK` button.
 
 ## Setup Boards Manager
 
