@@ -1,29 +1,32 @@
-#define MIN_LIBRARY_VER_BUILD_NO (0x0008)
+#define MIN_LIBRARY_VER_BUILD_NO (0x0012)
 #include <VivicoreSerial.h>
 #include <Wire.h>
 #include "lsm6ds3_reg.h"
 #include "lsm6ds3tr_c_reg.h"
 
-#define MAX_VALUE (100)
-#define MIN_VALUE (-1 * MAX_VALUE)
+#define MAX_VALUE     (100)
+#define MIN_VALUE     (-1 * MAX_VALUE)
 #define MAX_ACCEL_RAW (2000)                 // Unit: mG force
 #define MAX_ACCEL     (MAX_ACCEL_RAW / 1000) // Unit: G force
 #define MAX_GYRO_RAW  (500000)               // Unit: mdeg/s
 #define MAX_GYRO      (MAX_GYRO_RAW / 1000)  // Unit: deg/s
-#define SLAVE_ADR (0x6B)
-#define BOOT_TIME (20) // Unit: ms
+#define SLAVE_ADR     (0x6B)
+#define BOOT_TIME     (20) // Unit: ms
 
-const uint16_t USER_FW_VER = 0x000B;
+const uint16_t USER_FW_VER = 0x000D;
 const uint32_t BRANCH_TYPE = 0x00000008;
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}
-  {DC_GROUP_1, DC_NATURE_OUT, DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE}, // 1: Accel X
-  {DC_GROUP_1, DC_NATURE_OUT, DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE}, // 2: Accel Y
-  {DC_GROUP_1, DC_NATURE_OUT, DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE}, // 3: Accel Z
-  {DC_GROUP_2, DC_NATURE_OUT, DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE}, // 4: Gyro X
-  {DC_GROUP_2, DC_NATURE_OUT, DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE}, // 5: Gyro Y
-  {DC_GROUP_2, DC_NATURE_OUT, DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE}, // 6: Gyro Z
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_1BYTE, MIN_VALUE,
+   MAX_VALUE}, // 1: Accel X
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_1BYTE, MIN_VALUE,
+   MAX_VALUE}, // 2: Accel Y
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_1BYTE, MIN_VALUE,
+   MAX_VALUE}, // 3: Accel Z
+  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE}, // 4: Gyro X
+  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE}, // 5: Gyro Y
+  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE}, // 6: Gyro Z
 };
 
 /* Initialize mems driver interface */
@@ -32,18 +35,17 @@ typedef union {
   int16_t i16bit[3];
   uint8_t u8bit[6];
 } axis3bit16_t;
-static uint8_t whoamI = 0;
-static int32_t writeReg(void*, uint8_t reg, uint8_t *bufp, uint16_t len);
-static int32_t readReg(void*, uint8_t reg, uint8_t *bufp, uint16_t len);
+static uint8_t      whoamI = 0;
+static int32_t      writeReg(void *, uint8_t reg, uint8_t *bufp, uint16_t len);
+static int32_t      readReg(void *, uint8_t reg, uint8_t *bufp, uint16_t len);
 static stmdev_ctx_t dev_ctx = {
-  writeReg,
-  readReg,
-  NULL,  // Customizable optional pointer
+  writeReg, readReg,
+  NULL, // Customizable optional pointer
 };
 
 /* Write generic device register (platform dependent) */
-static int32_t writeReg(void*, uint8_t reg, uint8_t *bufp, uint16_t len) {
-	int32_t ret = 0;
+static int32_t writeReg(void *, uint8_t reg, uint8_t *bufp, uint16_t len) {
+  int32_t ret = 0;
 
   Wire.beginTransmission(SLAVE_ADR);
   Wire.write(reg);
@@ -56,10 +58,10 @@ static int32_t writeReg(void*, uint8_t reg, uint8_t *bufp, uint16_t len) {
 }
 
 /* Read generic device register (platform dependent) */
-static int32_t readReg(void*, uint8_t reg, uint8_t *bufp, uint16_t len) {
-	uint8_t i = 0;
-	uint8_t c = 0;
-	int32_t ret = 0;
+static int32_t readReg(void *, uint8_t reg, uint8_t *bufp, uint16_t len) {
+  uint8_t i   = 0;
+  uint8_t c   = 0;
+  int32_t ret = 0;
 
   Wire.beginTransmission(SLAVE_ADR);
   Wire.write(reg);
@@ -68,7 +70,7 @@ static int32_t readReg(void*, uint8_t reg, uint8_t *bufp, uint16_t len) {
   } else {
     Wire.requestFrom(SLAVE_ADR, len);
     while ((Wire.available()) && (i < len)) {
-      c = Wire.read();
+      c     = Wire.read();
       *bufp = c;
       bufp++;
       i++;
@@ -128,7 +130,7 @@ static void initSensor(const uint8_t maxG, const uint16_t maxDps) {
 
   if (whoamI == LSM6DS3_ID) {
     const lsm6ds3_xl_fs_t accel = (lsm6ds3_xl_fs_t)getAccelCode(maxG);
-    const lsm6ds3_fs_g_t gyro = (lsm6ds3_fs_g_t)getGyroCode(maxDps);
+    const lsm6ds3_fs_g_t  gyro  = (lsm6ds3_fs_g_t)getGyroCode(maxDps);
 
     DebugPlainPrintln0("LSM6DS3");
 
@@ -149,7 +151,7 @@ static void initSensor(const uint8_t maxG, const uint16_t maxDps) {
     lsm6ds3_gy_data_rate_set(&dev_ctx, LSM6DS3_GY_ODR_52Hz);
   } else {
     const lsm6ds3tr_c_fs_xl_t accel = (lsm6ds3tr_c_fs_xl_t)getAccelCode(maxG);
-    const lsm6ds3tr_c_fs_g_t gyro = (lsm6ds3tr_c_fs_g_t)getGyroCode(maxDps);
+    const lsm6ds3tr_c_fs_g_t  gyro  = (lsm6ds3tr_c_fs_g_t)getGyroCode(maxDps);
 
     DebugPlainPrintln0("LSM6DS3TR_C");
 
@@ -170,16 +172,15 @@ static void initSensor(const uint8_t maxG, const uint16_t maxDps) {
     lsm6ds3tr_c_gy_full_scale_set(&dev_ctx, gyro);
     /* Configure filtering chain(No aux interface) */
     /* Accelerometer - analog filter */
-    lsm6ds3tr_c_xl_filter_analog_set(&dev_ctx,
-                                    LSM6DS3TR_C_XL_ANA_BW_400Hz);
+    lsm6ds3tr_c_xl_filter_analog_set(&dev_ctx, LSM6DS3TR_C_XL_ANA_BW_400Hz);
     /* Accelerometer - LPF1 path ( LPF2 not used )*/
     lsm6ds3tr_c_xl_lp1_bandwidth_set(&dev_ctx, LSM6DS3TR_C_XL_LP1_ODR_DIV_2);
     /* Accelerometer - LPF1 + LPF2 path */
-    //lsm6ds3tr_c_xl_lp2_bandwidth_set(&dev_ctx,
+    // lsm6ds3tr_c_xl_lp2_bandwidth_set(&dev_ctx,
     //                                LSM6DS3TR_C_XL_LOW_NOISE_LP_ODR_DIV_100);
     /* Accelerometer - High Pass / Slope path */
-    //lsm6ds3tr_c_xl_reference_mode_set(&dev_ctx, PROPERTY_DISABLE);
-    //lsm6ds3tr_c_xl_hp_bandwidth_set(&dev_ctx, LSM6DS3TR_C_XL_HP_ODR_DIV_100);
+    // lsm6ds3tr_c_xl_reference_mode_set(&dev_ctx, PROPERTY_DISABLE);
+    // lsm6ds3tr_c_xl_hp_bandwidth_set(&dev_ctx, LSM6DS3TR_C_XL_HP_ODR_DIV_100);
     /* Gyroscope - filtering chain */
     lsm6ds3tr_c_gy_band_pass_set(&dev_ctx, LSM6DS3TR_C_LP2_ONLY);
   }
@@ -203,10 +204,10 @@ static bool isSensorDataReady(void) {
 
 static void getAccelData(const uint8_t maxG, float *accelValues) {
   static const CONVERT_UNIT converters[] = {
-    lsm6ds3_from_fs2g_to_mg,      // LSM6DS3_2g  = 0
-    lsm6ds3_from_fs16g_to_mg,     // LSM6DS3_16g = 1
-    lsm6ds3_from_fs4g_to_mg,      // LSM6DS3_4g  = 2
-    lsm6ds3_from_fs8g_to_mg,      // LSM6DS3_8g  = 3
+    lsm6ds3_from_fs2g_to_mg,  // LSM6DS3_2g  = 0
+    lsm6ds3_from_fs16g_to_mg, // LSM6DS3_16g = 1
+    lsm6ds3_from_fs4g_to_mg,  // LSM6DS3_4g  = 2
+    lsm6ds3_from_fs8g_to_mg,  // LSM6DS3_8g  = 3
   };
   static const CONVERT_UNIT convertersTrc[] = {
     lsm6ds3tr_c_from_fs2g_to_mg,  // LSM6DS3TR_C_2g  = 0
@@ -214,10 +215,9 @@ static void getAccelData(const uint8_t maxG, float *accelValues) {
     lsm6ds3tr_c_from_fs4g_to_mg,  // LSM6DS3TR_C_4g  = 2
     lsm6ds3tr_c_from_fs8g_to_mg,  // LSM6DS3TR_C_8g  = 3
   };
-  const uint8_t accel = getAccelCode(maxG);
-  const CONVERT_UNIT accelConverter =
-    (whoamI == LSM6DS3_ID) ? converters[accel] : convertersTrc[accel];
-  axis3bit16_t rawAccel = {};
+  const uint8_t      accel          = getAccelCode(maxG);
+  const CONVERT_UNIT accelConverter = (whoamI == LSM6DS3_ID) ? converters[accel] : convertersTrc[accel];
+  axis3bit16_t       rawAccel       = {};
 
   /* Read acceleration field data */
   if (whoamI == LSM6DS3_ID) {
@@ -234,27 +234,26 @@ static void getAccelData(const uint8_t maxG, float *accelValues) {
 
 static void getGyroData(const uint16_t maxDps, float *gyroValues) {
   static const CONVERT_UNIT converters[] = {
-    lsm6ds3_from_fs250dps_to_mdps,       // LSM6DS3_250dps  = 0
-    lsm6ds3_from_fs125dps_to_mdps,       // LSM6DS3_125dps  = 1
-    lsm6ds3_from_fs500dps_to_mdps,       // LSM6DS3_500dps  = 2
-    NULL,                                // No dps
-    lsm6ds3_from_fs1000dps_to_mdps,      // LSM6DS3_1000dps = 4
-    NULL,                                // No dps
-    lsm6ds3_from_fs2000dps_to_mdps,      // LSM6DS3_2000dps = 6
+    lsm6ds3_from_fs250dps_to_mdps,  // LSM6DS3_250dps  = 0
+    lsm6ds3_from_fs125dps_to_mdps,  // LSM6DS3_125dps  = 1
+    lsm6ds3_from_fs500dps_to_mdps,  // LSM6DS3_500dps  = 2
+    NULL,                           // No dps
+    lsm6ds3_from_fs1000dps_to_mdps, // LSM6DS3_1000dps = 4
+    NULL,                           // No dps
+    lsm6ds3_from_fs2000dps_to_mdps, // LSM6DS3_2000dps = 6
   };
   static const CONVERT_UNIT convertersTrc[] = {
-    lsm6ds3tr_c_from_fs250dps_to_mdps,   // LSM6DS3TR_C_250dps  = 0
-    lsm6ds3tr_c_from_fs125dps_to_mdps,   // LSM6DS3TR_C_125dps  = 1
-    lsm6ds3tr_c_from_fs500dps_to_mdps,   // LSM6DS3TR_C_500dps  = 2
-    NULL,                                // No dps
-    lsm6ds3tr_c_from_fs1000dps_to_mdps,  // LSM6DS3TR_C_1000dps = 4
-    NULL,                                // No dps
-    lsm6ds3tr_c_from_fs2000dps_to_mdps,  // LSM6DS3TR_C_2000dps = 6
+    lsm6ds3tr_c_from_fs250dps_to_mdps,  // LSM6DS3TR_C_250dps  = 0
+    lsm6ds3tr_c_from_fs125dps_to_mdps,  // LSM6DS3TR_C_125dps  = 1
+    lsm6ds3tr_c_from_fs500dps_to_mdps,  // LSM6DS3TR_C_500dps  = 2
+    NULL,                               // No dps
+    lsm6ds3tr_c_from_fs1000dps_to_mdps, // LSM6DS3TR_C_1000dps = 4
+    NULL,                               // No dps
+    lsm6ds3tr_c_from_fs2000dps_to_mdps, // LSM6DS3TR_C_2000dps = 6
   };
-  const uint8_t gyro = getGyroCode(maxDps);
-  const CONVERT_UNIT gyroConverter =
-    (whoamI == LSM6DS3_ID) ? converters[gyro] : convertersTrc[gyro];
-  axis3bit16_t rawAngular = {};
+  const uint8_t      gyro          = getGyroCode(maxDps);
+  const CONVERT_UNIT gyroConverter = (whoamI == LSM6DS3_ID) ? converters[gyro] : convertersTrc[gyro];
+  axis3bit16_t       rawAngular    = {};
 
   /* Read angular rate field data */
   if (whoamI == LSM6DS3_ID) {
@@ -276,18 +275,14 @@ void setup() {
 }
 
 void loop() {
-  static const uint8_t DC_NUM = sizeof(dcInfo) / sizeof(dcInfo[0]);
-  static const float maxRawValues[DC_NUM] = {
-    MAX_ACCEL_RAW, MAX_ACCEL_RAW, MAX_ACCEL_RAW,
-    MAX_GYRO_RAW, MAX_GYRO_RAW, MAX_GYRO_RAW,
+  static const uint8_t DC_NUM               = sizeof(dcInfo) / sizeof(dcInfo[0]);
+  static const float   maxRawValues[DC_NUM] = {
+    MAX_ACCEL_RAW, MAX_ACCEL_RAW, MAX_ACCEL_RAW, MAX_GYRO_RAW, MAX_GYRO_RAW, MAX_GYRO_RAW,
   };
   static int8_t prevValues[DC_NUM] = {
-    INT8_MIN, INT8_MIN, INT8_MIN,
-    INT8_MIN, INT8_MIN, INT8_MIN,
+    INT8_MIN, INT8_MIN, INT8_MIN, INT8_MIN, INT8_MIN, INT8_MIN,
   };
   float readValues[DC_NUM] = {};
-  uint8_t statbuffer[DC_NUM * 2] = {};
-  uint8_t bufIndex = 0;
 
   delay(30);
 
@@ -299,19 +294,15 @@ void loop() {
   getGyroData(MAX_GYRO, &readValues[3]);
 
   for (uint8_t i = 0; i < DC_NUM; i++) {
-    const float minRawValue = -1.0 * maxRawValues[i];
-    const float maxRawValue = maxRawValues[i];
-    const long constrainedValue =
-      (long)(constrain(readValues[i], minRawValue, maxRawValue));
-    const int8_t mappedValue = (int8_t)map(
-      constrainedValue,
-      (long)minRawValue, (long)maxRawValue,
-      MIN_VALUE, MAX_VALUE);
+    const float  minRawValue      = -1.0 * maxRawValues[i];
+    const float  maxRawValue      = maxRawValues[i];
+    const long   constrainedValue = (long)(constrain(readValues[i], minRawValue, maxRawValue));
+    const int8_t mappedValue =
+      (int8_t)map(constrainedValue, (long)minRawValue, (long)maxRawValue, MIN_VALUE, MAX_VALUE);
 
     if (prevValues[i] != mappedValue) {
       prevValues[i] = mappedValue;
-      statbuffer[bufIndex++] = i + 1;
-      statbuffer[bufIndex++] = mappedValue;
+      Vivicore.write(i + 1, mappedValue);
     }
 
     DebugPlainPrint0(readValues[i]);
@@ -325,8 +316,5 @@ void loop() {
   }
   DebugPlainPrintln0();
 
-  if (bufIndex) {
-    Vivicore.write(statbuffer, bufIndex);
-    Vivicore.flush();
-  }
+  Vivicore.flush();
 }

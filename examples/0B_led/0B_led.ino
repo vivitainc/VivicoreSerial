@@ -1,4 +1,4 @@
-#define MIN_LIBRARY_VER_BUILD_NO (0x0004)
+#define MIN_LIBRARY_VER_BUILD_NO (0x0012)
 #include <VivicoreSerial.h>
 
 #define LED_HZ          (1000)
@@ -7,44 +7,52 @@
 #define MAX_LIGHT_16BIT (F_CPU / LED_HZ)
 #define DEFAULT_LIGHT   (0)
 #if defined(BOARD_REV) && (BOARD_REV >= BOARD_REV_FP1_DVT)
-#define MAX_LIGHT_R     (6234)            // For 5500K white
-#define MAX_LIGHT_G     (6909)            // For 5500K white
-#define MAX_LIGHT_B     (MAX_LIGHT_8BIT)  // For 5500K white
+#  define MAX_LIGHT_R (6234)           // For 5500K white
+#  define MAX_LIGHT_G (6909)           // For 5500K white
+#  define MAX_LIGHT_B (MAX_LIGHT_8BIT) // For 5500K white
 #else
-#define MAX_LIGHT_R     (MAX_LIGHT_8BIT)
-#define MAX_LIGHT_G     (MAX_LIGHT_16BIT)
-#define MAX_LIGHT_B     (MAX_LIGHT_16BIT)
+#  define MAX_LIGHT_R (MAX_LIGHT_8BIT)
+#  define MAX_LIGHT_G (MAX_LIGHT_16BIT)
+#  define MAX_LIGHT_B (MAX_LIGHT_16BIT)
 #endif
 
-#define LED_VCC_PIN     (2)
+#define LED_VCC_PIN (2)
 #if defined(BOARD_REV) && (BOARD_REV >= BOARD_REV_FP1_DVT)
-#define LED_R_PIN       (9)
-#define LED_G_PIN       (10)
-#define LED_B_PIN       (3)
+#  define LED_R_PIN (9)
+#  define LED_G_PIN (10)
+#  define LED_B_PIN (3)
 #else
-#define LED_R_PIN       (3)
-#define LED_G_PIN       (10)
-#define LED_B_PIN       (9)
+#  define LED_R_PIN (3)
+#  define LED_G_PIN (10)
+#  define LED_B_PIN (9)
 #endif
+#define N_RGB     (3)
+#define EXP_GAMMA ((float)2.2)
 
-const uint16_t USER_FW_VER = 0x000F;
-const uint32_t BRANCH_TYPE = 0x0000000B;  // Branch index number on vivitainc/ViviParts.git
+const uint16_t USER_FW_VER = 0x0012;
+const uint32_t BRANCH_TYPE = 0x0000000B; // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}
-  {DC_GROUP_1, DC_NATURE_IN, DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_R, DEFAULT_LIGHT}, // 1: Red
-  {DC_GROUP_1, DC_NATURE_IN, DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_G, DEFAULT_LIGHT}, // 2: Green
-  {DC_GROUP_1, DC_NATURE_IN, DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_B, DEFAULT_LIGHT}, // 3: Blue
-};
-uint8_t statbuffer[] = {
-  1, 0, 0, // 1: Red
-  2, 0, 0, // 2: Green
-  3, 0, 0, // 3: Blue (Needs 2bytes buffer exceeding 127 as signed max value of 1byte analog)
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_R,
+   DEFAULT_LIGHT}, // 1: Red
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_G,
+   DEFAULT_LIGHT}, // 2: Green
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_B,
+   DEFAULT_LIGHT}, // 3: Blue
 };
 
-uint16_t led_r = DEFAULT_LIGHT;
-uint16_t led_g = DEFAULT_LIGHT;
-uint16_t led_b = DEFAULT_LIGHT;
+static const int pins[N_RGB] = {
+  LED_R_PIN,
+  LED_G_PIN,
+  LED_B_PIN,
+};
+
+static uint16_t lights[N_RGB] = {
+  DEFAULT_LIGHT,
+  DEFAULT_LIGHT,
+  DEFAULT_LIGHT,
+};
 
 static inline void analogWrite_(const int pin, const uint16_t value) {
   const uint16_t max_value =
@@ -83,75 +91,71 @@ static inline void analogWrite_(const int pin, const uint16_t value) {
   }
 }
 
+static inline void correctGamma(const uint16_t *rgb_in, uint16_t *rgb_out) {
+  static const uint16_t max_lights[N_RGB] = {
+    MAX_LIGHT_R,
+    MAX_LIGHT_G,
+    MAX_LIGHT_B,
+  };
+
+  for (uint8_t i = 0; i < N_RGB; i++) {
+    rgb_out[i] = (uint16_t)roundf((float)max_lights[i] * pow((float)rgb_in[i] / (float)max_lights[i], EXP_GAMMA));
+  }
+}
+
+static inline void analogWriteGamma(const uint16_t *rgb_in) {
+  uint16_t rgb_out[N_RGB] = {};
+  correctGamma(rgb_in, rgb_out);
+  for (uint8_t i = 0; i < N_RGB; i++) {
+    analogWrite_(pins[i], rgb_out[i]);
+  }
+}
+
 void setup() {
   Vivicore.begin(BRANCH_TYPE, USER_FW_VER, dcInfo, countof(dcInfo), MIN_LIBRARY_VER_BUILD_NO);
 
   pinMode(LED_VCC_PIN, OUTPUT);
-  pinMode(LED_R_PIN, OUTPUT);
-  pinMode(LED_G_PIN, OUTPUT);
-  pinMode(LED_B_PIN, OUTPUT);
+  for (uint8_t i = 0; i < N_RGB; i++) {
+    pinMode(pins[i], OUTPUT);
+  }
 
-  TCCR3A = bit(COM3B1) | bit(WGM31);               // no inverting, OC3B only connected
-  TCCR3B = bit(WGM33) | bit(WGM32) | bit(CS30);    // fast PWM, TOP=ICR3, no prescaling
-  ICR3 = F_CPU / LED_VCC_HZ;                       // TOP counter value
-  OCR3B = F_CPU / LED_VCC_HZ / 2;                  // OC3B (D2/PD2) only output with duty cycle 50%
-  bitSet(PORTD, 2);                                // When not using the Output Compare Modulator, PORTD2 must also be set in order to enable the output.
+  TCCR3A = bit(COM3B1) | bit(WGM31);            // no inverting, OC3B only connected
+  TCCR3B = bit(WGM33) | bit(WGM32) | bit(CS30); // fast PWM, TOP=ICR3, no prescaling
+  ICR3   = F_CPU / LED_VCC_HZ;                  // TOP counter value
+  OCR3B  = F_CPU / LED_VCC_HZ / 2;              // OC3B (D2/PD2) only output with duty cycle 50%
+  bitSet(PORTD,
+         2); // When not using the Output Compare Modulator, PORTD2 must also be set in order to enable the output.
 
   TCCR1A = bit(COM1A1) | bit(COM1B1) | bit(WGM11); // no inverting, OC1A and OC1B connected
   TCCR1B = bit(WGM13) | bit(WGM12) | bit(CS10);    // fast PWM, TOP=ICR1, no prescaling
-  ICR1 = MAX_LIGHT_16BIT;                          // TOP counter value for 1kHz
+  ICR1   = MAX_LIGHT_16BIT;                        // TOP counter value for 1kHz
 
-  TCCR2A = bit(COM2B1) | bit(WGM21) | bit(WGM20);  // no inverting, OC2B only connected, fast PWM, TOP=0xFF
-  TCCR2B = bit(CS21);                              // clk/8 prescaling for about 4kHz higher frequency than another 16bit timers
+  TCCR2A = bit(COM2B1) | bit(WGM21) | bit(WGM20); // no inverting, OC2B only connected, fast PWM, TOP=0xFF
+  TCCR2B = bit(CS21); // clk/8 prescaling for about 4kHz higher frequency than another 16bit timers
 
-  analogWrite_(LED_R_PIN, led_r);
-  analogWrite_(LED_G_PIN, led_g);
-  analogWrite_(LED_B_PIN, led_b);
+  analogWriteGamma(lights);
 }
 
 void loop() {
-  uint8_t recv_cnt = 0;
+  const AvailableNum_t cnt = Vivicore.available();
 
   delay(10);
 
-  while (Vivicore.available()) {
-    uint8_t byte = Vivicore.read();
-    if (recv_cnt < sizeof(statbuffer)) {
-      statbuffer[recv_cnt++] = byte;
+  for (uint8_t i = 0; i < cnt.scaler; i++) {
+    const ScalerData_t scaler = Vivicore.read();
+    if (scaler.success && (0 < scaler.dc_n) && (scaler.dc_n <= N_RGB)) {
+      const uint8_t rgb = scaler.dc_n - 1;
+      lights[rgb]       = static_cast<uint16_t>(scaler.data);
     }
+    DebugPlainPrint0("dc_n:");
+    DebugPlainPrint0(scaler.dc_n);
+    DebugPlainPrint0(", success:");
+    DebugPlainPrint0(scaler.success);
+    DebugPlainPrint0(", data:");
+    DebugPlainPrintln0(scaler.data);
   }
 
-  if (recv_cnt > 0) {
-    int i = 0;
-
-    while (i < (recv_cnt - 1)) {
-      const uint8_t dc_number = statbuffer[i++];
-
-      switch (dc_number) {
-      case 1:
-        led_r = statbuffer[i++];
-        led_r <<= 8;
-        led_r |= statbuffer[i++];
-        break;
-      case 2:
-        led_g = statbuffer[i++];
-        led_g <<= 8;
-        led_g |= statbuffer[i++];
-        break;
-      case 3:
-        led_b = statbuffer[i++];
-        led_b <<= 8;
-        led_b |= statbuffer[i++];
-        break;
-      default:
-        // Exit while loop
-        i += recv_cnt;
-        break;
-      }
-    }
-
-    analogWrite_(LED_R_PIN, led_r);
-    analogWrite_(LED_G_PIN, led_g);
-    analogWrite_(LED_B_PIN, led_b);
+  if (cnt.scaler > 0) {
+    analogWriteGamma(lights);
   }
 }

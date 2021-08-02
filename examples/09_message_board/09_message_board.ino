@@ -1,4 +1,4 @@
-#define MIN_LIBRARY_VER_BUILD_NO (0x0005)
+#define MIN_LIBRARY_VER_BUILD_NO (0x0012)
 #include <VivicoreSerial.h>
 #include <Wire.h>
 #include <misakiUTF16.h>
@@ -31,24 +31,24 @@
 
 const char *INITIAL_TEXT = "";
 
-const uint16_t USER_FW_VER = 0x000E;
+const uint16_t USER_FW_VER = 0x0011;
 const uint32_t BRANCH_TYPE = 0x00000009;
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}
-  {DC_GROUP_1, DC_NATURE_IN, DC_TYPE_BINARY, 0, 255} // 1: Text Input
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BINARY, 0, 255} // 1: Text Input
 };
 
-const uint8_t slave_adrs[2] = {0x77, 0x74};
+const uint8_t slave_adrs[2]         = {0x77, 0x74};
 const uint8_t connected_banks[2][2] = {
   // CA, CB
-  { 1, 1 }, // slave_adrs[0]
-  { 0, 1 }, // slave_adrs[1]
+  {1, 1}, // slave_adrs[0]
+  {0, 1}, // slave_adrs[1]
 };
 byte ImageBuf[IMAGE_H_NUM][IMAGE_V_SIZE] = {}; // IMAGE_H_NUM 文字 x IMAGE_V_SIZE byte pattern buffer
-byte ImageWidth[IMAGE_H_NUM] = {};             // font width
-byte ImageBright[IMAGE_H_NUM] = {};            // Bright values
-byte ImageLen = 0;                             // 文字数
+byte ImageWidth[IMAGE_H_NUM]             = {}; // font width
+byte ImageBright[IMAGE_H_NUM]            = {}; // Bright values
+byte ImageLen                            = 0;  // 文字数
 
 inline void writeReg(const uint8_t slave_adr, const uint8_t reg, const uint8_t data) {
   Wire.beginTransmission(slave_adr);
@@ -101,7 +101,7 @@ void writeDot(const int x, const int y, const int illum) {
 // Clear screen with using burst command.
 void fillScreen(const uint8_t illum) {
   for (uint8_t idx = 0; idx < sizeof(slave_adrs); idx++) {
-    const uint8_t num_burst = (REG_END_PWM_CTRL - REG_START_PWM_CTRL + 1) / MAX_BURST_LENGTH;
+    const uint8_t num_burst       = (REG_END_PWM_CTRL - REG_START_PWM_CTRL + 1) / MAX_BURST_LENGTH;
     const uint8_t last_burst_size = (REG_END_PWM_CTRL - REG_START_PWM_CTRL + 1) % MAX_BURST_LENGTH;
     for (uint8_t n = 0; n < num_burst; n++) {
       writeRegBurst(slave_adrs[idx], REG_START_PWM_CTRL + n * MAX_BURST_LENGTH, MAX_BURST_LENGTH, illum);
@@ -112,15 +112,15 @@ void fillScreen(const uint8_t illum) {
 
 void writeImage(const char *pUTF8) {
   static uint16_t pUTF16[IMAGE_H_NUM];
-  uint8_t n = Utf8ToUtf16(pUTF16, const_cast<char *>(pUTF8));
+  uint8_t         n = Utf8ToUtf16(pUTF16, const_cast<char *>(pUTF8));
 
   if (n > IMAGE_H_NUM) {
     n = IMAGE_H_NUM;
   }
 
   for (byte i = 0; i < n; i++) {
-    const uint16_t d = pUTF16[i];
-    bool validFont = false;
+    const uint16_t d         = pUTF16[i];
+    bool           validFont = false;
 
     ImageBright[i] = BRIGHT_NORMAL;
     memset(&ImageBuf[i][0], 0, IMAGE_V_SIZE);
@@ -128,7 +128,7 @@ void writeImage(const char *pUTF8) {
 
     if (!validFont) {
       memset(&ImageBuf[i][0], 0xFF, IMAGE_V_SIZE);
-      ImageWidth[i] = 4;
+      ImageWidth[i]  = 4;
       ImageBright[i] = BRIGHT_LOW;
     } else if ((highByte(d) == 0) || ((d >= UTF16_CHAR_PERIOD) && (d <= UTF16_CHAR_PSOUND))) {
       ImageWidth[i] = 4;
@@ -154,7 +154,7 @@ void updateScr(const int shift_h, const int shift_v, const bool clear) {
   }
 
   for (byte img_n = 0; img_n < ImageLen; img_n++) {
-    const byte img_width = ImageWidth[img_n];
+    const byte img_width  = ImageWidth[img_n];
     const byte img_bright = ImageBright[img_n];
 
     for (byte img_v = 0; img_v < IMAGE_V_SIZE; img_v++) {
@@ -166,9 +166,9 @@ void updateScr(const int shift_h, const int shift_v, const bool clear) {
         if (is_draw) {
           int x_scr = x_lside + img_h - shift_h;
           int y_scr = img_v - shift_v;
-          DebugPlainPrint0(x_scr);
-          DebugPlainPrint0(",");
-          DebugPlainPrintln0(y_scr);
+          DebugPlainPrint2(x_scr);
+          DebugPlainPrint2(",");
+          DebugPlainPrintln2(y_scr);
           if (x_scr < 0) {
             x_scr += IMAGE_H_NUM * 4;
           } else if (x_scr >= (IMAGE_H_NUM * 4)) {
@@ -179,20 +179,20 @@ void updateScr(const int shift_h, const int shift_v, const bool clear) {
           } else if (y_scr >= IMAGE_V_SIZE) {
             y_scr -= IMAGE_V_SIZE;
           }
-          DebugPlainPrint0(x_scr);
-          DebugPlainPrint0(",");
-          DebugPlainPrintln0(y_scr);
+          DebugPlainPrint2(x_scr);
+          DebugPlainPrint2(",");
+          DebugPlainPrintln2(y_scr);
           writeDot(x_scr, y_scr, img_bright);
-          // DebugPlainPrint0("*");
+          // DebugPlainPrint2("*");
         } else {
-          // DebugPlainPrint0(" ");
+          // DebugPlainPrint2(" ");
         }
       }
     }
     x_lside += img_width;
-    DebugPlainPrintln0("");
+    DebugPlainPrintln2("");
   }
-  DebugPlainPrintln0("");
+  DebugPlainPrintln2("");
 }
 
 void convCharImage(const uint8_t *charbuf) {
@@ -202,17 +202,16 @@ void convCharImage(const uint8_t *charbuf) {
 }
 
 bool isValidCtrlReg(const uint8_t slave_adr, const uint8_t reg) {
-  // LEDs which are no connected must be off by LED Control Register (Frame Registers) or it will affect other LEDs. 
-  uint8_t adr_idx = 0;
+  // LEDs which are no connected must be off by LED Control Register (Frame Registers) or it will affect other LEDs.
+  uint8_t       adr_idx  = 0;
   const uint8_t bank_idx = bitRead(reg, 0);
 
-  for (; adr_idx < sizeof(slave_adrs); adr_idx++ ) {
+  for (; adr_idx < sizeof(slave_adrs); adr_idx++) {
     if (slave_adr == slave_adrs[adr_idx]) {
       break;
     }
   }
-  if ((adr_idx >= sizeof(slave_adrs)) ||
-      (REG_END_LED_CTRL < reg)) {
+  if ((adr_idx >= sizeof(slave_adrs)) || (REG_END_LED_CTRL < reg)) {
     return false;
   }
 
@@ -225,7 +224,7 @@ void initDisp(void) {
 
   for (uint8_t n = 0; n < sizeof(slave_adrs); n++) {
     const uint8_t slave_adr = slave_adrs[n];
-    uint8_t frame_reg;
+    uint8_t       frame_reg;
 
     // shutdown->normal operation
     writeRegByPage(slave_adr, PAGE_TO_FUNC, FUNC_TO_SHUTDOWN, 0);
@@ -252,7 +251,7 @@ void initDisp(void) {
     for (; frame_reg <= REG_END_PWM_CTRL; frame_reg++) {
       writeRegByPage(slave_adr, 0, frame_reg, 0x00);
     }
-    writeRegByPage(slave_adr, PAGE_TO_FUNC, FUNC_TO_AUDIO_SYNC, 0);  // audio sync off
+    writeRegByPage(slave_adr, PAGE_TO_FUNC, FUNC_TO_AUDIO_SYNC, 0); // audio sync off
     selectPage(slave_adr, 0);
   }
 }
@@ -265,8 +264,7 @@ void initScr() {
 }
 
 void setup() {
-  Vivicore.begin(BRANCH_TYPE, USER_FW_VER, dcInfo, countof(dcInfo),
-                 MIN_LIBRARY_VER_BUILD_NO);
+  Vivicore.begin(BRANCH_TYPE, USER_FW_VER, dcInfo, countof(dcInfo), MIN_LIBRARY_VER_BUILD_NO);
 
   digitalWrite(EN_PIN, HIGH);
   pinMode(EN_PIN, OUTPUT);
@@ -291,39 +289,36 @@ void setup() {
 }
 
 void loop() {
-  static uint8_t statbuffer[WORK_BUF_SIZE] = {};
-  static uint8_t charbuffer[DISP_BUF_SIZE] = {};
-  static bool is_scroll = 0;
-  static int image_h_shift = 0;
-  static unsigned long prev_time = 0;
-  uint8_t recv_cnt = Vivicore.available();
+  static uint8_t       charbuffer[DISP_BUF_SIZE] = {};
+  static bool          is_scroll                 = 0;
+  static int           image_h_shift             = 0;
+  static unsigned long prev_time                 = 0;
+  const AvailableNum_t recv_cnt                  = Vivicore.available();
+  RawData_t            raw                       = {};
 
-  if (recv_cnt > 0) {
-    DebugPlainPrint1("CNT:");
-    DebugPlainPrintln1(recv_cnt);
-    if (recv_cnt <= WORK_BUF_SIZE) {
-      DebugPlainPrint1("Read: ");
-      for (int i = 0; i < recv_cnt; i++) {
-        statbuffer[i] = Vivicore.read();
-        DebugHexPrint1(statbuffer[i]);
-      }
-    } else {
-      DebugPlainPrint0("DATA too long");
-      for (int i = 0; i < recv_cnt; i++) {
-        Vivicore.read();
-      }
-      recv_cnt = 0;
+  if (recv_cnt.raw > 0) {
+    raw = Vivicore.readRaw();
+  }
+
+  if (raw.success && (raw.data_len > 0)) {
+    DebugPlainPrint1("success:");
+    DebugPlainPrint1(raw.success);
+    DebugPlainPrint1(", len:");
+    DebugPlainPrint1(raw.data_len);
+    DebugPlainPrint1(", data:");
+    for (uint8_t i = 0; i < raw.data_len; i++) {
+      // Dump raw data
+      DebugHexPrint1(raw.data[i]);
     }
-    DebugPlainPrintln0();
+    DebugPlainPrintln1();
 
-    is_scroll = ((statbuffer[0] & 0x01) != 0);
+    is_scroll = ((raw.data[0] & 0x01) != 0);
     for (uint8_t char_idx = 0; char_idx < DISP_BUF_SIZE; char_idx++) {
-      charbuffer[char_idx] = (char_idx < recv_cnt) ? statbuffer[char_idx + 1] : ' ';
+      charbuffer[char_idx] = (char_idx < raw.data_len) ? raw.data[char_idx + 1] : ' ';
     }
 
     image_h_shift = 0;
-    recv_cnt = 0;
-    prev_time = millis();
+    prev_time     = millis();
 
     convCharImage(charbuffer);
     updateScr(image_h_shift, IMAGE_V_SHIFT, true);
@@ -337,9 +332,9 @@ void loop() {
     if (image_h_shift > IMAGE_H_SIZE) {
       image_h_shift = 0;
     }
-    DebugPlainPrintln0(image_h_shift);
+    DebugPlainPrint1("h_shift:");
+    DebugPlainPrintln1(image_h_shift);
   }
-  // Vivicore.flush();
 
   delay(10);
 }

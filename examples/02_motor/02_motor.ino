@@ -1,40 +1,44 @@
-#define MIN_LIBRARY_VER_BUILD_NO (0x0008)
+#define MIN_LIBRARY_VER_BUILD_NO (0x0012)
 #include <VivicoreSerial.h>
 
-#define BATTERY_ALERT_RESET_PIN  (A1)  // LOW active
-#define BATTERY_ALERT_DETECT_PIN (A2)  // LOW active
-#define MOTOR1_DIR_PIN (2)
-#define MOTOR2_DIR_PIN (A0)
-#define MOTOR1_SPEED_PIN (9)
-#define MOTOR2_SPEED_PIN (10)
+#define BATTERY_ALERT_RESET_PIN  (A1) // LOW active
+#define BATTERY_ALERT_DETECT_PIN (A2) // LOW active
+#define MOTOR1_DIR_PIN           (2)
+#define MOTOR2_DIR_PIN           (A0)
+#define MOTOR1_SPEED_PIN         (9)
+#define MOTOR2_SPEED_PIN         (10)
 
-#define LOOP_INTERVAL        (10)    // Unit: ms.
-#define DURATION_BATTERY_LOW (1000)  // Unit: ms. Alert battery low to Core if the state is kept in this duration
+#define LOOP_INTERVAL        (10)   // Unit: ms.
+#define DURATION_BATTERY_LOW (1000) // Unit: ms. Alert battery low to Core if the state is kept in this duration
 
-#define MOTOR_HZ  (1000)
-#define MAX_DUTY_CNT (F_CPU / MOTOR_HZ)
-#define MAX_SPEED (MAX_DUTY_CNT * 65 / 100)  // Limit duty 65% for another motors e.g. FA130
+#define MOTOR_HZ      (1000)
+#define MAX_DUTY_CNT  (F_CPU / MOTOR_HZ)
+#define MAX_SPEED     (MAX_DUTY_CNT)
 #define DEFAULT_SPEED (0)
+#define CHANNELS      (2)
 
-const uint16_t USER_FW_VER = 0x000C;
-const uint32_t BRANCH_TYPE = 0x00000002;  // Branch index number on vivitainc/ViviParts.git
+const uint16_t USER_FW_VER = 0x0011;
+const uint32_t BRANCH_TYPE = 0x00000002; // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}
-  {DC_GROUP_1,          DC_NATURE_IN,  DC_TYPE_ANALOG_2BYTES, -1 * MAX_SPEED, MAX_SPEED, DEFAULT_SPEED}, // 1: Motor1 Speed & Direction
-  {DC_GROUP_2,          DC_NATURE_IN,  DC_TYPE_ANALOG_2BYTES, -1 * MAX_SPEED, MAX_SPEED, DEFAULT_SPEED}, // 2: Motor2 Speed & Direction
-  {DC_GROUP_FOR_SYSTEM, DC_NATURE_OUT, DC_TYPE_BOOLEAN,       0,              1},                        // 3: Is Battery Low
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, -1 * MAX_SPEED, MAX_SPEED,
+   DEFAULT_SPEED}, // 1: Motor1 Control
+  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, -1 * MAX_SPEED, MAX_SPEED,
+   DEFAULT_SPEED},                                                                              // 2: Motor2 Control
+  {DcGroup_t::DC_GROUP_FOR_SYSTEM, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1}, // 3: Is Battery Low
 };
 
-uint8_t statbuffer[] = {
-  1, 0, 0,           // 1: Motor1 Speed & Direction
-  2, 0, 0,           // 2: Motor2 Speed & Direction
+const uint8_t dir_pins[CHANNELS] = {
+  MOTOR1_DIR_PIN,
+  MOTOR2_DIR_PIN,
 };
-uint8_t battery_status[] = {
-  3, (uint8_t)false, // 3: Is Battery Low
+const uint8_t speed_pins[CHANNELS] = {
+  MOTOR1_SPEED_PIN,
+  MOTOR2_SPEED_PIN,
 };
 
-static inline void analogWrite_(const int pin, const uint16_t value) {
+static inline void analogWrite_(const uint8_t pin, const uint16_t value) {
   if (value == 0) {
     digitalWrite(pin, LOW);
   } else if (value == MAX_DUTY_CNT) {
@@ -52,21 +56,24 @@ static inline void analogWrite_(const int pin, const uint16_t value) {
   }
 }
 
+static inline void setDirection(const uint8_t pin, const int16_t value) {
+  digitalWrite(pin, (value > 0) ? HIGH : LOW);
+}
+
 static inline void detectLowBattery(void) {
   static uint16_t batteryLowDuration = 0;
-  const bool isBatteryLow = (digitalRead(BATTERY_ALERT_DETECT_PIN) == LOW);
+  static bool     prevBatteryLow     = false;
+  const bool      isBatteryLow       = (digitalRead(BATTERY_ALERT_DETECT_PIN) == LOW);
 
   if (isBatteryLow) {
     batteryLowDuration += LOOP_INTERVAL;
-    DebugPlainPrint0("battery low:");
-    DebugPlainPrintln0(batteryLowDuration);
     digitalWrite(BATTERY_ALERT_RESET_PIN, LOW);
     digitalWrite(BATTERY_ALERT_RESET_PIN, HIGH);
   } else {
     batteryLowDuration = 0;
   }
 
-  if (battery_status[1] != (uint8_t)isBatteryLow) {
+  if (prevBatteryLow != isBatteryLow) {
     bool shouldNotify = false;
     if (isBatteryLow) {
       if (batteryLowDuration > DURATION_BATTERY_LOW) {
@@ -77,11 +84,16 @@ static inline void detectLowBattery(void) {
     }
 
     if (shouldNotify) {
-      battery_status[1] = (uint8_t)isBatteryLow;
-      Vivicore.write(battery_status, sizeof(battery_status));
+      prevBatteryLow = isBatteryLow;
+      Vivicore.write(3, isBatteryLow); // 3: Is Battery Low
     }
 
     Vivicore.flush();
+
+    DebugPlainPrint0("duration:");
+    DebugPlainPrint0(batteryLowDuration);
+    DebugPlainPrint0(", low:");
+    DebugPlainPrintln0(isBatteryLow);
   }
 }
 
@@ -96,68 +108,53 @@ void setup() {
   digitalWrite(BATTERY_ALERT_RESET_PIN, LOW);
   digitalWrite(BATTERY_ALERT_RESET_PIN, HIGH);
 
-  digitalWrite(MOTOR1_DIR_PIN, LOW);
-  digitalWrite(MOTOR2_DIR_PIN, LOW);
-  pinMode(MOTOR1_DIR_PIN, OUTPUT);
-  pinMode(MOTOR2_DIR_PIN, OUTPUT);
-  pinMode(MOTOR1_SPEED_PIN, OUTPUT);
-  pinMode(MOTOR2_SPEED_PIN, OUTPUT);
+  for (int i = 0; i < CHANNELS; i++) {
+    digitalWrite(dir_pins[i], LOW);
+    pinMode(dir_pins[i], OUTPUT);
+    pinMode(speed_pins[i], OUTPUT);
+  }
 
   TCCR1A = bit(COM1A1) | bit(COM1B1) | // no inverting
            bit(WGM11);
-  TCCR1B = bit(WGM13) | bit(WGM12) |   // fast PWM, TOP=ICR1
-           bit(CS10);                  // no prescaling
-  ICR1 = MAX_DUTY_CNT;                 // TOP counter value
+  TCCR1B = bit(WGM13) | bit(WGM12) | // fast PWM, TOP=ICR1
+           bit(CS10);                // no prescaling
+  ICR1 = MAX_DUTY_CNT;               // TOP counter value
 
-  analogWrite_(MOTOR1_SPEED_PIN, DEFAULT_SPEED);
-  analogWrite_(MOTOR2_SPEED_PIN, DEFAULT_SPEED);
+  for (uint8_t ch = 0; ch < CHANNELS; ch++) {
+    setDirection(dir_pins[ch], DEFAULT_SPEED);
+    analogWrite_(speed_pins[ch], DEFAULT_SPEED);
+  }
 }
 
 void loop() {
-  static int16_t speed1 = 0;
-  static int16_t speed2 = 0;
-  uint8_t recvCnt = 0;
+  static int16_t prev_speeds[CHANNELS] = {
+    DEFAULT_SPEED,
+    DEFAULT_SPEED,
+  };
+  const AvailableNum_t cnt = Vivicore.available();
 
   delay(LOOP_INTERVAL);
 
   detectLowBattery();
 
-  while (Vivicore.available()) {
-    uint8_t byte = Vivicore.read();
-    if (recvCnt < sizeof(statbuffer)) {
-      statbuffer[recvCnt++] = byte;
-    }
-  }
+  for (uint8_t i = 0; i < cnt.scaler; i++) {
+    const ScalerData_t scaler = Vivicore.read();
+    const int16_t      speed  = static_cast<int16_t>(scaler.data);
 
-  if (recvCnt > 0) {
-    int i = 0;
-
-    while (i < (recvCnt - 1)) {
-      const uint8_t dc_number = statbuffer[i++];
-
-      switch (dc_number) {
-      case 1:
-        speed1 = statbuffer[i++];
-        speed1 <<= 8;
-        speed1 |= statbuffer[i++];
-        digitalWrite(MOTOR1_DIR_PIN, (speed1 >= 0) ? LOW : HIGH);
-        break;
-      case 2:
-        speed2 = statbuffer[i++];
-        speed2 <<= 8;
-        speed2 |= statbuffer[i++];
-        digitalWrite(MOTOR2_DIR_PIN, (speed2 >= 0) ? LOW : HIGH);
-        break;
-      default:
-        // Exit while loop
-        i += recvCnt;
-        break;
+    if (scaler.success && (0 < scaler.dc_n) && (scaler.dc_n <= CHANNELS)) {
+      const uint8_t ch = scaler.dc_n - 1;
+      if (speed != prev_speeds[ch]) {
+        prev_speeds[ch] = speed;
+        setDirection(dir_pins[ch], speed);
+        analogWrite_(speed_pins[ch], (uint16_t)abs(speed));
       }
-    } // While
+    }
 
-    analogWrite_(MOTOR1_SPEED_PIN, (uint16_t)abs(speed1));
-    analogWrite_(MOTOR2_SPEED_PIN, (uint16_t)abs(speed2));
+    DebugPlainPrint0("success:");
+    DebugPlainPrint0(scaler.success);
+    DebugPlainPrint0(", speed");
+    DebugPlainPrint0(scaler.dc_n);
+    DebugPlainPrint0(":");
+    DebugPlainPrintln0(speed);
   }
-
-  Vivicore.flush();
 }

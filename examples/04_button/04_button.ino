@@ -1,13 +1,13 @@
-#define MIN_LIBRARY_VER_BUILD_NO (0x0004)
+#define MIN_LIBRARY_VER_BUILD_NO (0x0012)
 #include <VivicoreSerial.h>
 
 #define BUTTON_NUM (4)
-#define UP_PIN    (2)
-#define LEFT_PIN  (3)
-#define RIGHT_PIN (9)
-#define DOWN_PIN  (10)
+#define UP_PIN     (2)
+#define LEFT_PIN   (3)
+#define RIGHT_PIN  (9)
+#define DOWN_PIN   (10)
 
-const uint16_t USER_FW_VER = 0x0008;
+const uint16_t USER_FW_VER = 0x000A;
 const uint32_t BRANCH_TYPE = 0x00000004;
 
 const int buttonPins[BUTTON_NUM] = {
@@ -19,10 +19,10 @@ const int buttonPins[BUTTON_NUM] = {
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}
-  {DC_GROUP_1, DC_NATURE_OUT, DC_TYPE_BOOLEAN, 0, 1}, // 1: Button UP (X)
-  {DC_GROUP_1, DC_NATURE_OUT, DC_TYPE_BOOLEAN, 0, 1}, // 2: Button LEFT (Y)
-  {DC_GROUP_1, DC_NATURE_OUT, DC_TYPE_BOOLEAN, 0, 1}, // 3: Button RIGHT (A)
-  {DC_GROUP_1, DC_NATURE_OUT, DC_TYPE_BOOLEAN, 0, 1}, // 4: Button DOWN (B)
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1}, // 1: Button UP (X)
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1}, // 2: Button LEFT (Y)
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1}, // 3: Button RIGHT (A)
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1}, // 4: Button DOWN (B)
 };
 
 void setup() {
@@ -34,10 +34,7 @@ void setup() {
 
 void loop() {
   static uint8_t prevButtonState[BUTTON_NUM] = {};
-  uint8_t buttonState[BUTTON_NUM] = {};
-  uint8_t bufToSend[BUTTON_NUM * 2] = {};
-  uint8_t *bufToSendPtr = bufToSend;
-  uint8_t sizeToSend= 0;
+  uint8_t        buttonState[BUTTON_NUM]     = {};
 
   delay(10);
 
@@ -46,14 +43,8 @@ void loop() {
 
     if (buttonState[buttonIndex] != prevButtonState[buttonIndex]) {
       prevButtonState[buttonIndex] = buttonState[buttonIndex];
-      *bufToSendPtr++ = buttonIndex + 1;
-      *bufToSendPtr++ = (uint8_t)(buttonState[buttonIndex] != 0);
-      sizeToSend += 2;
+      Vivicore.write(buttonIndex + 1, buttonState[buttonIndex] != 0);
     }
-  }
-
-  if (sizeToSend) {
-    Vivicore.write(bufToSend, sizeToSend);
   }
 
   Vivicore.flush();

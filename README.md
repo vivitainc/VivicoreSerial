@@ -29,7 +29,7 @@ And a part of the official sketches of VIVIWARE Cell Branch included as examples
 |[Arduino-misakiUTF16 v1.02a](https://github.com/vivitainc/Arduino-misakiUTF16/releases/tag/1.02a)|[Free software lisence](https://github.com/Tamakichi/Arduino-misakiUTF16)<br>本フォントライブラリは、「美咲フォント」と同様にフリー（自由な）ソフトウエアです。<br>あらゆる改変の有無に関わらず、また商業的な利用であっても、自由にご利用、複製、再配布することができます。<br>ただし、全て無保証とさせていただきます。|
 |Misaki font (included in Arduino-misakiUTF16)|[Free software lisence](https://littlelimit.net/font.htm#license)<br>These fonts are free software.<br>Unlimited permission is granted to use, copy, and distribute them, with or without modification, either commercially or noncommercially.<br>THESE FONTS ARE PROVIDED "AS IS" WITHOUT WARRANTY.|
 |Arduino core and libraries (included in Arduino IDE)|[LGPLv2.1](https://github.com/arduino/Arduino/blob/master/license.txt)|
-|[ATmegaBOOT](https://github.com/vivitainc/328pb_bootloader/blob/develop/bootloaders/atmega/ATmegaBOOT_168.c) (included in board package setup on [How to setup](#how-to-setup))|[GPLv2](https://github.com/arduino/ArduinoCore-avr/blob/master/bootloaders/atmega/ATmegaBOOT_168.c)|
+|[ATmegaBOOT](https://github.com/vivitainc/custom_cell_boards/blob/master/bootloaders/atmega/ATmegaBOOT_168.c) (included in board package setup on [How to setup](#how-to-setup))|[GPLv2](https://github.com/arduino/ArduinoCore-avr/blob/master/bootloaders/atmega/ATmegaBOOT_168.c)|
 
 **NOTE:**
 The following libraries cannot be found on Library Manager, and need to be installed by zip archive got from the above Github link if you build and upload the examples code depending them.
@@ -76,3 +76,16 @@ This instruction describes how to setup Arduino IDE to build VIVIWARE Cell Custo
 # Only for VivicoreSerial library developer
 
 Refer to [README](https://github.com/vivitainc/branch_cell/blob/develop/README.md) for library developer.
+
+# VivicoreSerial version history on Library Manager
+- 2.0.0 : Add features or fix issues as the following
+    - Update UART protocol v7 to change the baudrate to 50k from 100k to avoid dropping data
+    - Improve interface of begin, available, read, write, and flush
+    - Update examples ino to support the latest library interface
+- 1.1.0 : Add features or fix issues as the following
+    - Send stored TX data set in discovery sequence
+    - Make initial value to be able to override and send as DC_INI
+    - Update examples ino to support the latest library interface
+- 1.0.2 : Fix github URL for Library Manager
+- 1.0.1 : Replace public README
+- 1.0.0 : First version for Library Manager
