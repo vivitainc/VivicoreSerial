@@ -82,11 +82,19 @@
 #include "VivicoreSerialVersion.h"
 #include "VivicoreSerialDebug.h"
 
-// IO pin number definitions
-#define PIN_DEBUG_LED (6)
-#define PIN_EN_RX     (7)
-#define PIN_EN_TX     (8)
-#define PIN_EN_PWR    (A3)
+// Below pins are defined on pins_arduino.h included in Arduino.h
+#ifndef PIN_VIVIWARE_DEBUG_LED
+#  define PIN_VIVIWARE_DEBUG_LED (6)
+#endif
+#ifndef PIN_VIVIWARE_EN_RX
+#  define PIN_VIVIWARE_EN_RX (7)
+#endif
+#ifndef PIN_VIVIWARE_EN_TX
+#  define PIN_VIVIWARE_EN_TX (8)
+#endif
+#ifndef PIN_VIVIWARE_EN_PWR
+#  define PIN_VIVIWARE_EN_PWR (A3)
+#endif
 
 #define NUM_SERIAL_BYTES (10)
 #define NUM_BRTYPE_BYTES (4)
@@ -182,9 +190,11 @@ public:
   /** @endcond */
 
   /**
-   * This API initializes this library instance and store configuration to communicate with core. The instance can be
-   * configured by arguments of this API. This API returns true or false which is returned by
-   * @ref DataCodeTranslator::init.
+   * This API initializes this library instance and store configuration to communicate with core by the arguments and
+   * @ref write API. This API returns error in any case of the following conditions.
+   *
+   * - @ref DataCodeTranslator::init returns false
+   * - Overriding data_ini by @ref write is out of range of data_min and data_max
    *
    * @param [in] branch_type Branch type value
    * @param [in] user_version Version number for user program
@@ -243,10 +253,11 @@ public:
   RawData_t readRaw(void);
 
   /**
-   * This API stores scaler data to be sent to core corresponding to DC number. It is necessary to call @ref flush to
-   * send the stored data to core. The stored value specified by DC number can be overwritten if this API was called
-   * multiple times. This API returns error and does not store the specified data in any case of the following
-   * conditions.
+   * This API stores scaler data to be sent to core corresponding to DC number. It is necessary to call @ref flush after
+   * calling this API to send the stored data to core, or to call this API before @ref begin to override data_ini in DC
+   * info as samle code implemented on examples/06_slider/06_slider.ino file. The stored value specified by DC number
+   * can be overwritten if this API was called multiple times. This API returns error and does not store the specified
+   * data in any case of the following conditions.
    *
    * - dc_n is out of range between 1 to the maximum value @ref NUM_MAX_DC in specification
    *
@@ -307,7 +318,6 @@ public:
 
   void clearTransmitting(void);
   void setSyncBreakReceived(void);
-  bool setOverrideIni(const uint8_t dc_idx, const int16_t val, const dcInfo_t *dc_info, const uint8_t dc_num);
 
   volatile uint8_t *const _ubrrh; // USART baudrate register high
   volatile uint8_t *const _ubrrl; // USART baudrate register low
@@ -343,11 +353,6 @@ private:
     uint8_t dc_nums_count;
   };
 
-  struct overrideIni_t {
-    bool    set;
-    int16_t data_ini;
-  };
-
   const uint8_t _signature[3];
   const uint8_t _serial_number[NUM_SERIAL_BYTES];
 
@@ -359,15 +364,15 @@ private:
 
   scalerDataR_t _scaler_data_by_core = {};
   scalerDataW_t _scaler_data_by_user = {};
+  scalerDataW_t _scaler_data_for_ini = {};
   data_pkt      _raw_data_by_core    = {};
   data_pkt      _raw_data_by_user    = {};
 
   DataCodeTranslator *_translator = nullptr;
 
-  const dcInfo_t *_dc_info                  = nullptr;
-  uint8_t         _dc_num                   = 0;
-  overrideIni_t   _override_ini[NUM_MAX_DC] = {};
-  bool            _dominate_led             = false;
+  const dcInfo_t *_dc_info      = nullptr;
+  uint8_t         _dc_num       = 0;
+  bool            _dominate_led = false;
 
   volatile bool _is_dcdt_ok             = false;
   volatile bool _send_flag              = false; // Written data is available for transmission if true

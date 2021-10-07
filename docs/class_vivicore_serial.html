@@ -169,7 +169,11 @@ Public Member Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>This API initializes this library instance and store configuration to communicate with core. The instance can be configured by arguments of this API. This API returns true or false which is returned by <a class="el" href="class_data_code_translator.html#a0a8c4f193b5107bba60ee2a024ccd6b1">DataCodeTranslator::init</a>.</p>
+<p>This API initializes this library instance and store configuration to communicate with core by the arguments and <a class="el" href="class_vivicore_serial.html#ac88b9f45b8aa3cd72e009aa3a2682fdb">write</a> API. This API returns error in any case of the following conditions.</p>
+<ul>
+<li><a class="el" href="class_data_code_translator.html#a0a8c4f193b5107bba60ee2a024ccd6b1">DataCodeTranslator::init</a> returns false</li>
+<li>Overriding data_ini by <a class="el" href="class_vivicore_serial.html#ac88b9f45b8aa3cd72e009aa3a2682fdb">write</a> is out of range of data_min and data_max</li>
+</ul>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramdir">[in]</td><td class="paramname">branch_type</td><td>Branch type value </td></tr>
@@ -304,7 +308,7 @@ Public Member Functions</h2></td></tr>
         </tr>
       </table>
 </div><div class="memdoc">
-<p>This API stores scaler data to be sent to core corresponding to DC number. It is necessary to call <a class="el" href="class_vivicore_serial.html#a33e6fec58aa09269ba5c7a3893c9cb88">flush</a> to send the stored data to core. The stored value specified by DC number can be overwritten if this API was called multiple times. This API returns error and does not store the specified data in any case of the following conditions.</p>
+<p>This API stores scaler data to be sent to core corresponding to DC number. It is necessary to call <a class="el" href="class_vivicore_serial.html#a33e6fec58aa09269ba5c7a3893c9cb88">flush</a> after calling this API to send the stored data to core, or to call this API before <a class="el" href="class_vivicore_serial.html#a1964aeda33f77fd8a3fdcf0debc39661">begin</a> to override data_ini in DC info as samle code implemented on examples/06_slider/06_slider.ino file. The stored value specified by DC number can be overwritten if this API was called multiple times. This API returns error and does not store the specified data in any case of the following conditions.</p>
 <ul>
 <li>dc_n is out of range between 1 to the maximum value <a class="el" href="_communication_protocol_8h.html#aec0a43acd425b4244ea08795f0e262ab">NUM_MAX_DC</a> in specification</li>
 </ul>

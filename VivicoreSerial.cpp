@@ -44,14 +44,11 @@
  * @endcond
  */
 
-#include <stdio.h>
-#include <string.h>
-#include "Arduino.h"
-#include "wiring_private.h"
-#include "EEPROM.h"
+#include <wiring_private.h>
+#include <EEPROM.h>
+#include <avr/wdt.h>
+#include <avr/boot.h>
 #include "VivicoreSerial.h"
-#include "avr/wdt.h"
-#include "avr/boot.h"
 
 // Product spec
 #define NUM_MAX_SLAVE (5)
@@ -63,7 +60,7 @@
 
 // Macro functions
 #define setIndicatorLed(led_state) \
-  { digitalWrite(PIN_DEBUG_LED, !(led_state)); }
+  { digitalWrite(PIN_VIVIWARE_DEBUG_LED, !(led_state)); }
 
 enum StateStoreChar_t {
   STATE_STORE_CHAR_NONE = 0x00,
@@ -290,6 +287,11 @@ BranchCommand_t VivicoreSerial::parseCommand(const uint8_t c) {
 BranchCommandRes_t VivicoreSerial::processCommand(const BranchCommand_t cmd) {
   BranchCommandRes_t ret = BCMDRES_NOTHING;
 
+  if (_translator->hasFatalError()) {
+    DebugStringPrintln0("F: Fatal error in DC info configuration!");
+    return ret;
+  }
+
   switch (cmd) {
   // Should send response data against the below commands
   case BCMD_RESET:
@@ -416,11 +418,6 @@ bool VivicoreSerial::sendResponse(const BranchCommand_t bcmd, const BranchComman
   bool             has_nature_in              = false;
   bool             has_override_ini           = false;
 
-  if (_translator->hasFatalError()) {
-    DebugStringPrintln0("F: Fatal error in DC info configuration!");
-    return false;
-  }
-
   _data_response[buf_index++] = STX; // STX
   _data_response[buf_index++] = 0;   // Dummy DATA LENGTH
 #if defined(BCMD_ON_RES_SUPPORT)
@@ -501,9 +498,9 @@ bool VivicoreSerial::sendResponse(const BranchCommand_t bcmd, const BranchComman
       if (_dc_info[i].data_nature == DcNature_t::DC_NATURE_IN) {
         has_nature_in = true;
       }
-      if (_override_ini[i].set) {
+      if (_scaler_data_for_ini.is_set[i]) {
         has_override_ini  = true;
-        encoding_array[i] = static_cast<uint16_t>(_override_ini[i].data_ini);
+        encoding_array[i] = _scaler_data_for_ini.body[i];
       }
     }
 
@@ -516,16 +513,20 @@ bool VivicoreSerial::sendResponse(const BranchCommand_t bcmd, const BranchComman
     }
     break;
   case BCMDRES_ACK_EMPTY:
-  default:
     break;
+  case BCMDRES_NOTHING:
+    // no response
+    return true;
+  default:
+    DebugStringPrint0("F: Unknown res type ");
+    DebugPlainPrintln0(res_type);
+    return false;
   }
 
-  if (res_type != BCMDRES_NOTHING) {
-    const uint8_t crc_target_length = buf_index;
-    _data_response[1]               = buf_index - 1;
-    _data_response[buf_index++]     = getCRC8(_data_response, crc_target_length);
-    pushToTxRingBuffAndTransmit(_data_response, buf_index);
-  }
+  const uint8_t crc_target_length = buf_index;
+  _data_response[1]               = buf_index - 1;
+  _data_response[buf_index++]     = getCRC8(_data_response, crc_target_length);
+  pushToTxRingBuffAndTransmit(_data_response, buf_index);
 
   DebugGPIOLow(PORTD, 2);  // debug D2 PD2
   DebugGPIOHigh(PORTD, 2); // debug D2 PD2
@@ -664,14 +665,14 @@ VivicoreSerial::VivicoreSerial(volatile uint8_t *ubrrh, volatile uint8_t *ubrrl,
       },
       _translator(new DataCodeTranslator()) {
 
-  pinMode(PIN_EN_PWR, OUTPUT);
+  pinMode(PIN_VIVIWARE_EN_PWR, OUTPUT);
   _is_passthru_mode = GPIOR0 & 0x1;
   if (_is_passthru_mode) {
     // Supply power
     // PORTC = PORTC | B00001000; // A3 PC3 to High Start supplying power
-    digitalWrite(PIN_EN_PWR, HIGH);
+    digitalWrite(PIN_VIVIWARE_EN_PWR, HIGH);
   } else {
-    digitalWrite(PIN_EN_PWR, LOW);
+    digitalWrite(PIN_VIVIWARE_EN_PWR, LOW);
   }
 }
 
@@ -684,11 +685,11 @@ VivicoreSerial::~VivicoreSerial(void) {
 // Private Methods /////////////////////////////////////////////////////////////
 
 void VivicoreSerial::init() {
-  pinMode(PIN_EN_RX, OUTPUT);
-  pinMode(PIN_EN_TX, OUTPUT);
-  pinMode(PIN_DEBUG_LED, OUTPUT);
-  digitalWrite(PIN_EN_RX, HIGH); // ALWAYS HIGH
-  digitalWrite(PIN_EN_TX, LOW);  // ONLY HIGH WHEN TRANSMITTING , TO REMOVE
+  pinMode(PIN_VIVIWARE_EN_RX, OUTPUT);
+  pinMode(PIN_VIVIWARE_EN_TX, OUTPUT);
+  pinMode(PIN_VIVIWARE_DEBUG_LED, OUTPUT);
+  digitalWrite(PIN_VIVIWARE_EN_RX, HIGH); // ALWAYS HIGH
+  digitalWrite(PIN_VIVIWARE_EN_TX, LOW);  // ONLY HIGH WHEN TRANSMITTING , TO REMOVE
 
   for (int i = 0; i < NUM_BRTYPE_BYTES; i++) {
     uint8_t brTypeDat = EEPROM.read(E2END - (NUM_BRTYPE_BYTES - i) + 1);
@@ -818,6 +819,17 @@ bool VivicoreSerial::begin(const uint32_t branch_type, const uint16_t user_versi
   }
   _dc_num  = _translator->getDcNum();
   _dc_info = _translator->getDcInfo();
+
+  for (uint8_t i = 0; i < _dc_num; i++) {
+    if (_scaler_data_for_ini.is_set[i]) {
+      const int16_t override_ini = _scaler_data_for_ini.body[i];
+      if ((override_ini < _dc_info[i].data_min) || (override_ini > _dc_info[i].data_max)) {
+        DebugStringPrint0("F: Overriding DC ini is out of range for DC ");
+        DebugPlainPrintln0(i + 1);
+        ret = false;
+      }
+    }
+  }
 
   DebugGPIODirectOut(DDRB, 1); // debug D9 PB1
   DebugGPIODirectOut(DDRB, 2); // debug D10 PB2
@@ -1008,10 +1020,6 @@ bool VivicoreSerial::flush(void) {
     ret          = true;
   }
 
-  // Reset buffer for both of scaler and raw at flushing
-  memset(_scaler_data_by_user.is_set, 0, sizeof(_scaler_data_by_user.is_set));
-  _raw_data_by_user.datalen = 0;
-
   if (writing_data.datalen > 0) {
     _data_len_by_user = writing_data.datalen;
     if ((size_t)_data_len_by_user > sizeof(_data_by_user)) {
@@ -1047,8 +1055,12 @@ bool VivicoreSerial::flush(void) {
     }
     clearTransmitting(); // Set transmitting to false
   }
-  // DebugStringPrintln0("ret flush");
 
+  // Reset buffer for both of scaler and raw at flushing
+  memset(_scaler_data_by_user.is_set, 0, sizeof(_scaler_data_by_user.is_set));
+  _raw_data_by_user.datalen = 0;
+
+  // DebugStringPrintln0("ret flush");
   return ret;
 }
 
@@ -1080,6 +1092,8 @@ bool VivicoreSerial::writeRaw(const uint8_t *data, const size_t data_len, const 
 }
 
 bool VivicoreSerial::write(const uint8_t dc_n, const int32_t data_scaler) {
+  scalerDataW_t *const scaler_data = (_dc_info == nullptr) ? &_scaler_data_for_ini : &_scaler_data_by_user;
+
   if (_is_passthru_mode) {
     return true;
   }
@@ -1088,8 +1102,8 @@ bool VivicoreSerial::write(const uint8_t dc_n, const int32_t data_scaler) {
     return false;
   }
 
-  _scaler_data_by_user.body[dc_n - 1]   = static_cast<int16_t>(data_scaler);
-  _scaler_data_by_user.is_set[dc_n - 1] = true;
+  scaler_data->body[dc_n - 1]   = static_cast<int16_t>(data_scaler);
+  scaler_data->is_set[dc_n - 1] = true;
   return true;
 }
 
@@ -1172,19 +1186,6 @@ void VivicoreSerial::setSyncBreak(void) {
   sbi(*_ucsrb, _txen);
   sbi(*_ucsrb, _rxcie);
   DebugGPIOLow(PORTC, 5); // debug A5 PC5
-}
-
-bool VivicoreSerial::setOverrideIni(const uint8_t dc_idx, const int16_t val, const dcInfo_t *dc_info,
-                                    const uint8_t dc_num) {
-  // dc_idx should start from 1
-  if (dc_idx > 0 && dc_idx <= dc_num) {
-    const uint8_t i = dc_idx - 1;
-    if (val >= dc_info[i].data_min && val <= dc_info[i].data_max) {
-      _override_ini[i].set      = true;
-      _override_ini[i].data_ini = val;
-    }
-  }
-  return true;
 }
 
 size_t VivicoreSerial::pushToTxRingBuff(const uint8_t c) {

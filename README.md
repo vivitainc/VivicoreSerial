@@ -78,6 +78,8 @@ This instruction describes how to setup Arduino IDE to build VIVIWARE Cell Custo
 Refer to [README](https://github.com/vivitainc/branch_cell/blob/develop/README.md) for library developer.
 
 # VivicoreSerial version history on Library Manager
+- 3.0.0 : Add features or fix issues as the following
+    - Remove setOverrideIni and use write before begin to override DC_INI
 - 2.0.0 : Add features or fix issues as the following
     - Update UART protocol v7 to change the baudrate to 50k from 100k to avoid dropping data
     - Improve interface of begin, available, read, write, and flush

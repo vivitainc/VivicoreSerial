@@ -111,11 +111,12 @@ bool DataCodeTranslator::encode(const int16_t *encoding_values, data_pkt *out) {
 
 bool DataCodeTranslator::encode(const int16_t *encoding_values, const bool *is_set, data_pkt *out,
                                 const bool is_initial_data) {
-  uint8_t       bit_cnt          = 0; // 0 to 7
-  uint16_t      dc_flag          = 0;
-  const uint8_t data_body_length = min(_max_data_body_length + sizeof(dc_flag), NUM_MAX_UART_PKT_BODY_DATA);
-  bool          has_skipped_data = false;
-  bool          is_over_limit    = false;
+  uint8_t       bit_cnt            = 0; // 0 to 7
+  uint16_t      dc_flag            = 0;
+  const uint8_t data_body_length   = min(_max_data_body_length + sizeof(dc_flag), NUM_MAX_UART_PKT_BODY_DATA);
+  bool          has_skipped_data   = false;
+  bool          has_truncated_data = false;
+  bool          is_over_limit      = false;
 
   memset(out, 0, sizeof(data_pkt));
 
@@ -131,15 +132,23 @@ bool DataCodeTranslator::encode(const int16_t *encoding_values, const bool *is_s
       continue;
     }
 
-    const uint8_t  dc_n    = i + 1;
-    const DcType_t dc_type = _dc_info[i].data_type;
-    const size_t   dc_size = getDataSize(dc_type);
+    const uint8_t  dc_n           = i + 1;
+    const DcType_t dc_type        = _dc_info[i].data_type;
+    const size_t   dc_size        = getDataSize(dc_type);
+    int16_t        encoding_value = encoding_values[i];
 
-    if ((encoding_values[i] < _dc_info[i].data_min) || (encoding_values[i] > _dc_info[i].data_max)) {
+    if ((encoding_value < _dc_info[i].data_min) || (encoding_value > _dc_info[i].data_max)) {
       DebugStringPrint0("F: Encoding data is out of range for DC ");
-      DebugPlainPrintln0(dc_n);
-      has_skipped_data = true;
-      continue;
+      DebugPlainPrint0(dc_n);
+      if (is_initial_data) {
+        DebugStringPrintln0(" and truncated to min/max");
+        has_truncated_data = true;
+        encoding_value     = constrain(encoding_value, _dc_info[i].data_min, _dc_info[i].data_max);
+      } else {
+        DebugStringPrintln0(" and skipeed");
+        has_skipped_data = true;
+        continue;
+      }
     } else if ((dc_n != 1) && (dc_type == DcType_t::DC_TYPE_BINARY)) {
       DebugStringPrint0("F: DC_TYPE_BINARY cannot be in ");
       DebugPlainPrintln0(dc_n);
@@ -174,14 +183,14 @@ bool DataCodeTranslator::encode(const int16_t *encoding_values, const bool *is_s
     }
 
     if (dc_type == DcType_t::DC_TYPE_BOOLEAN) {
-      bitWrite(out->data[out->datalen], 7 - bit_cnt, encoding_values[i]);
+      bitWrite(out->data[out->datalen], 7 - bit_cnt, encoding_value);
       bit_cnt++;
     } else {
       if (dc_type == DcType_t::DC_TYPE_ANALOG_2BYTES) {
-        out->data[out->datalen++] = static_cast<uint8_t>(encoding_values[i] >> 8);
-        out->data[out->datalen++] = static_cast<uint8_t>(encoding_values[i]);
+        out->data[out->datalen++] = static_cast<uint8_t>(encoding_value >> 8);
+        out->data[out->datalen++] = static_cast<uint8_t>(encoding_value);
       } else { // including DcType_t::DC_TYPE_ANALOG_1BYTE, DcType_t::DC_TYPE_BINARY
-        out->data[out->datalen++] = static_cast<uint8_t>(encoding_values[i]);
+        out->data[out->datalen++] = static_cast<uint8_t>(encoding_value);
       }
     }
 
@@ -203,7 +212,7 @@ bool DataCodeTranslator::encode(const int16_t *encoding_values, const bool *is_s
     memset(out, 0, sizeof(data_pkt));
   }
 
-  return !has_skipped_data && !is_over_limit && (dc_flag != 0);
+  return !has_skipped_data && !has_truncated_data && !is_over_limit && (dc_flag != 0);
 }
 
 bool DataCodeTranslator::decode(const data_pkt *in, int16_t *values, uint8_t *dc_nums, uint8_t *dc_nums_count) {

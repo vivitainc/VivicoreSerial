@@ -1,4 +1,4 @@
-#define MIN_LIBRARY_VER_BUILD_NO (0x0012)
+#define MIN_LIBRARY_VER_BUILD_NO (0x0013)
 #include <VivicoreSerial.h>
 
 #define AVG_TIME             (10)
@@ -16,7 +16,7 @@
 #define AD_PRESCALER_64  (bit(ADPS2) | bit(ADPS1))
 #define AD_PRESCALER_128 (bit(ADPS2) | bit(ADPS1) | bit(ADPS0))
 
-const uint16_t USER_FW_VER = 0x0008;
+const uint16_t USER_FW_VER = 0x0009;
 const uint32_t BRANCH_TYPE = 0x00000006;
 
 const dcInfo_t dcInfo[] = {
@@ -65,8 +65,7 @@ void setup() {
   ADCSRA |= AD_PRESCALER_128;
 
   prevSet = getADCalcValue();
-
-  Vivicore.setOverrideIni(1, prevSet.trimVal, dcInfo, countof(dcInfo));
+  Vivicore.write(1, prevSet.trimVal);
   Vivicore.begin(BRANCH_TYPE, USER_FW_VER, dcInfo, countof(dcInfo), MIN_LIBRARY_VER_BUILD_NO);
 
   DebugPlainPrint0("ADCSRA: ");

@@ -11,13 +11,13 @@
 #define LOOP_INTERVAL        (10)   // Unit: ms.
 #define DURATION_BATTERY_LOW (1000) // Unit: ms. Alert battery low to Core if the state is kept in this duration
 
-#define MOTOR_HZ      (1000)
-#define MAX_DUTY_CNT  (F_CPU / MOTOR_HZ)
-#define MAX_SPEED     (MAX_DUTY_CNT)
+#define MOTOR_HZ      (8000)
+#define MAX_DUTY_CNT  (F_CPU / MOTOR_HZ) // 1000
+#define MAX_SPEED     (8000)             // Keep min/max spec same as version 0x0011
 #define DEFAULT_SPEED (0)
 #define CHANNELS      (2)
 
-const uint16_t USER_FW_VER = 0x0011;
+const uint16_t USER_FW_VER = 0x0013;
 const uint32_t BRANCH_TYPE = 0x00000002; // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
@@ -39,17 +39,19 @@ const uint8_t speed_pins[CHANNELS] = {
 };
 
 static inline void analogWrite_(const uint8_t pin, const uint16_t value) {
-  if (value == 0) {
+  const uint16_t mappedValue = map(value, 0, MAX_SPEED, 0, MAX_DUTY_CNT);
+
+  if (mappedValue == 0) {
     digitalWrite(pin, LOW);
-  } else if (value == MAX_DUTY_CNT) {
+  } else if (mappedValue == MAX_DUTY_CNT) {
     digitalWrite(pin, HIGH);
   } else {
     if (pin == MOTOR1_SPEED_PIN) {
       bitSet(TCCR1A, COM1A1);
-      OCR1A = value;
+      OCR1A = mappedValue;
     } else if (pin == MOTOR2_SPEED_PIN) {
       bitSet(TCCR1A, COM1B1);
-      OCR1B = value;
+      OCR1B = mappedValue;
     } else {
       // do nothing
     }
