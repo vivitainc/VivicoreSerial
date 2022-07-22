@@ -7,8 +7,10 @@
 #define RIGHT_PIN  (9)
 #define DOWN_PIN   (10)
 
-const uint16_t USER_FW_VER = 0x000A;
-const uint32_t BRANCH_TYPE = 0x00000004;
+const uint8_t  USER_FW_MAJOR_VER = 0x00;
+const uint8_t  USER_FW_MINOR_VER = 0x0A;
+const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
+const uint32_t BRANCH_TYPE       = 0x00000004;
 
 const int buttonPins[BUTTON_NUM] = {
   UP_PIN,    // 1: Button UP (X)

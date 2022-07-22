@@ -1,5 +1,6 @@
 var searchData=
 [
-  ['uart_5fprotocol_5fbaudrate',['UART_PROTOCOL_BAUDRATE',['../_communication_protocol_8h.html#ad0e5c7de7e97fcb4855b34b9c022b5d8',1,'CommunicationProtocol.h']]],
-  ['uart_5fprotocol_5fversion',['UART_PROTOCOL_VERSION',['../_communication_protocol_8h.html#a971049b2cff87aac6c4ba74b39d53009',1,'CommunicationProtocol.h']]]
+  ['uart_5fprotocol_5fbaudrate_123',['UART_PROTOCOL_BAUDRATE',['../_communication_protocol_8h.html#ad0e5c7de7e97fcb4855b34b9c022b5d8',1,'CommunicationProtocol.h']]],
+  ['uart_5fprotocol_5fmajor_5fversion_124',['UART_PROTOCOL_MAJOR_VERSION',['../_communication_protocol_8h.html#aa7f26a257092a7a1b66b7fc6d966db5e',1,'CommunicationProtocol.h']]],
+  ['uart_5fprotocol_5fminor_5fversion_125',['UART_PROTOCOL_MINOR_VERSION',['../_communication_protocol_8h.html#a82ec5bdb2d01c061aaf5f722f06da80d',1,'CommunicationProtocol.h']]]
 ];

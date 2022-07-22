@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['vivicoreserial',['VivicoreSerial',['../class_vivicore_serial.html',1,'']]]
+  ['vivicoreserial_68',['VivicoreSerial',['../class_vivicore_serial.html',1,'']]]
 ];

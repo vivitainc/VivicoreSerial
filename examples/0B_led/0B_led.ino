@@ -29,8 +29,10 @@
 #define N_RGB     (3)
 #define EXP_GAMMA ((float)2.2)
 
-const uint16_t USER_FW_VER = 0x0012;
-const uint32_t BRANCH_TYPE = 0x0000000B; // Branch index number on vivitainc/ViviParts.git
+const uint8_t  USER_FW_MAJOR_VER = 0x00;
+const uint8_t  USER_FW_MINOR_VER = 0x12;
+const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
+const uint32_t BRANCH_TYPE       = 0x0000000B; // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}

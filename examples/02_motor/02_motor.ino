@@ -17,8 +17,10 @@
 #define DEFAULT_SPEED (0)
 #define CHANNELS      (2)
 
-const uint16_t USER_FW_VER = 0x0013;
-const uint32_t BRANCH_TYPE = 0x00000002; // Branch index number on vivitainc/ViviParts.git
+const uint8_t  USER_FW_MAJOR_VER = 0x00;
+const uint8_t  USER_FW_MINOR_VER = 0x13;
+const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
+const uint32_t BRANCH_TYPE       = 0x00000002; // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}

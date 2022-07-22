@@ -278,9 +278,6 @@ BranchCommand_t VivicoreSerial::parseCommand(const uint8_t c) {
   //   _rx_buffer->head = i;
   // }
 
-  DebugGPIOLow(PORTD, 2);  // debug D2 PD2
-  DebugGPIOHigh(PORTD, 2); // debug D2 PD2
-
   return can_be_parsed ? (BranchCommand_t)proc_cmd : BCMD_INVALID;
 }
 
@@ -398,9 +395,6 @@ BranchCommandRes_t VivicoreSerial::processCommand(const BranchCommand_t cmd) {
     }
     break;
   }
-
-  DebugGPIOLow(PORTD, 2);  // debug D2 PD2
-  DebugGPIOHigh(PORTD, 2); // debug D2 PD2
 
   return ret;
 }
@@ -528,9 +522,6 @@ bool VivicoreSerial::sendResponse(const BranchCommand_t bcmd, const BranchComman
   _data_response[buf_index++]     = getCRC8(_data_response, crc_target_length);
   pushToTxRingBuffAndTransmit(_data_response, buf_index);
 
-  DebugGPIOLow(PORTD, 2);  // debug D2 PD2
-  DebugGPIOHigh(PORTD, 2); // debug D2 PD2
-
   return true;
 }
 
@@ -574,10 +565,10 @@ ISR(USART1_RX_vect)
 #  error Not supported!
 #endif
 {
+  DebugGPIOHigh(PORTD, 5); // debug D5 PD5
   if (active_object->_is_passthru_mode) {
     return;
   }
-  DebugGPIOHigh(PORTD, 2); // debug D2 PD2
 
   uint8_t         uart_stat = *(active_object->_ucsra);
   unsigned char   c         = *(active_object->_udr);
@@ -600,7 +591,7 @@ ISR(USART1_RX_vect)
     active_object->sendResponse(cmd, res);
   }
 
-  DebugGPIOLow(PORTD, 2); // debug D2 PD2
+  DebugGPIOLow(PORTD, 5); // debug D5 PD5
 }
 
 #if (CORE_COMM_UART_PORT == 0)
@@ -611,17 +602,21 @@ ISR(USART1_UDRE_vect)
 #  error Not supported!
 #endif
 {
+  DebugGPIOHigh(PORTE, 3); // debug A7 PE3
   if (active_object->_is_passthru_mode) {
     return;
   }
-  DebugGPIOHigh(PORTC, 4); // debug A4 PC4
 
   if (active_object->_tx_buffer->head == active_object->_tx_buffer->tail) {
     // Buffer empty, so disable interrupts
     cbi(*(active_object->_ucsrb), active_object->_udrie);
     // delayMicroseconds(800);
     loop_until_bit_is_set(*(active_object->_ucsra), active_object->_txc);
-    PORTB = PORTB & B11111110;          // digitalWrite(PIN_EN_TX, LOW);
+#if (BOARD_TYPE == BOARD_TYPE_CUSTOM)
+    PORTE &= ~_BV(PINE1); // digitalWrite(PIN_VIVIWARE_EN_TX, LOW);
+#else
+    PORTB &= ~_BV(PINB0); // digitalWrite(PIN_VIVIWARE_EN_TX, LOW);
+#endif
     active_object->clearTransmitting(); // Set transmitting to false
   } else {
     // There is more data in the output buffer. Send the next byte
@@ -633,7 +628,7 @@ ISR(USART1_UDRE_vect)
     *(active_object->_udr) = c;
   }
 
-  DebugGPIOLow(PORTC, 4); // debug A4 PC4
+  DebugGPIOLow(PORTE, 3); // debug A7 PE3
 }
 
 // Constructors ////////////////////////////////////////////////////////////////
@@ -667,6 +662,9 @@ VivicoreSerial::VivicoreSerial(volatile uint8_t *ubrrh, volatile uint8_t *ubrrl,
 
   pinMode(PIN_VIVIWARE_EN_PWR, OUTPUT);
   _is_passthru_mode = GPIOR0 & 0x1;
+#if defined(DISABLE_VIVICORE)
+  _is_passthru_mode = true;
+#endif
   if (_is_passthru_mode) {
     // Supply power
     // PORTC = PORTC | B00001000; // A3 PC3 to High Start supplying power
@@ -726,7 +724,6 @@ const uint8_t CRC8Table[256]
 
 // Get CRC8 from Table
 uint8_t VivicoreSerial::getCRC8(const uint8_t *buff, const size_t size) {
-  DebugGPIOHigh(PORTB, 1); // debug D9 PB1
   uint8_t crc8 = 0x00;
 
   for (size_t i = 0; i < size; i++) {
@@ -736,7 +733,6 @@ uint8_t VivicoreSerial::getCRC8(const uint8_t *buff, const size_t size) {
     crc8 = CRC8Table[crc8 ^ buff[i]];
 #endif
   }
-  DebugGPIOLow(PORTB, 1); // debug D9 PB1
   return crc8;
 }
 // Public Methods //////////////////////////////////////////////////////////////
@@ -764,7 +760,11 @@ bool VivicoreSerial::begin(const uint32_t branch_type, const uint16_t user_versi
   DebugHexPrint0(_is_passthru_mode);
   DebugStringPrintln0("");
   if (_is_passthru_mode) {
-    DebugStringPrint0("Pass Thru Mode");
+#if defined(DISABLE_VIVICORE)
+    DebugStringPrintln0("DISABLE_VIVICORE");
+#else
+    DebugStringPrintln0("Pass Thru Mode");
+#endif
     return true;
   }
 
@@ -831,21 +831,10 @@ bool VivicoreSerial::begin(const uint32_t branch_type, const uint16_t user_versi
     }
   }
 
-  DebugGPIODirectOut(DDRB, 1); // debug D9 PB1
-  DebugGPIODirectOut(DDRB, 2); // debug D10 PB2
-  DebugGPIODirectOut(DDRB, 5); // debug D13 PB5
-  DebugGPIODirectOut(DDRC, 4); // debug A4 PC4
-  DebugGPIODirectOut(DDRD, 2); // debug D2 PD2
-  DebugGPIODirectOut(DDRD, 3); // debug D3 PD3
-  DebugGPIODirectOut(DDRC, 5); // debug A5 PC5
-
-  DebugGPIOLow(PORTB, 1); // debug D9 PB1
-  DebugGPIOLow(PORTB, 2); // debug D10 PB2
-  DebugGPIOLow(PORTB, 5); // debug D13 PB5
-  DebugGPIOLow(PORTC, 4); // debug A4 PC4
-  DebugGPIOLow(PORTD, 2); // debug D2 PD2
-  DebugGPIOLow(PORTD, 3); // debug D3 PD3
-  DebugGPIOLow(PORTC, 5); // debug A5 PC5
+  DebugGPIODirectOut(DDRD, 5); // debug D5 PD5
+  DebugGPIOLow(PORTD, 5);      // debug D5 PD5
+  DebugGPIODirectOut(DDRE, 3); // debug A7 PE3
+  DebugGPIOLow(PORTE, 3);      // debug A7 PE3
 
   clearTransmitting(); // Set transmitting to false
 
@@ -1112,7 +1101,11 @@ bool VivicoreSerial::isInFatalError(void) {
 }
 
 void VivicoreSerial::pushToTxRingBuffAndTransmit(const uint8_t *buffer, const uint8_t datalen) {
-  PORTB = PORTB | B00000001; // digitalWrite(PIN_EN_TX, HIGH);
+#if (BOARD_TYPE == BOARD_TYPE_CUSTOM)
+  PORTE |= _BV(PINE1); // digitalWrite(PIN_VIVIWARE_EN_TX, HIGH);
+#else
+  PORTB |= _BV(PINB0); // digitalWrite(PIN_VIVIWARE_EN_TX, HIGH);
+#endif
 
   setSyncBreak();
 
@@ -1135,12 +1128,9 @@ void VivicoreSerial::pushToTxRingBuffAndTransmit(const uint8_t *buffer, const ui
   // delay(10);
   // flush();
   // loop_until_bit_is_set(*_ucsra, UDRE0);
-  DebugGPIOLow(PORTD, 2);  // debug D2 PD2
-  DebugGPIOHigh(PORTD, 2); // debug D2 PD2
 }
 
 void VivicoreSerial::setSyncBreak(void) {
-  DebugGPIOHigh(PORTC, 5); // debug A5 PC5
   // wait for transmission of outgoing data
 
   // UDR is kept full while the buffer is not empty, so TXC triggers when EMPTY
@@ -1148,9 +1138,6 @@ void VivicoreSerial::setSyncBreak(void) {
   while (isTransmitting() && !bitRead(*_ucsra, _txc))
     ;
   clearTransmitting(); // Set transmitting to false
-
-  DebugGPIOWrite(PORTD, 3, 1); // debug D3 PD3
-  DebugGPIOWrite(PORTD, 3, 0); // debug D3 PD3
 
   cbi(*_ucsrb, _rxen);
   cbi(*_ucsrb, _txen);
@@ -1162,21 +1149,13 @@ void VivicoreSerial::setSyncBreak(void) {
 
   sbi(*_ucsra, _txc);
 
-  DebugGPIOWrite(PORTD, 3, bitRead(*_ucsra, _txc)); // debug D3 PD3
-
   // sync_break;
   *_udr = 0;
-
-  DebugGPIOWrite(PORTD, 3, bitRead(*_ucsra, _txc)); // debug D3 PD3
 
   // loop_until_bit_is_set(*_ucsra, UDRE0);
   // loop_until_bit_is_set(*_ucsra, _txc);
   while (!bitRead(*_ucsra, _txc)) {
-    DebugGPIOWrite(PORTD, 3, bitRead(*_ucsra, _txc)); // debug D3 PD3
-    DebugGPIOHigh(PORTB, 1);                          // debug D9 PB1
-    DebugGPIOLow(PORTB, 1);                           // debug D9 PB1
   }
-  DebugGPIOWrite(PORTD, 3, bitRead(*_ucsra, _txc)); // debug D3 PD3
 
   cbi(*_ucsrb, _txen);
 
@@ -1185,7 +1164,6 @@ void VivicoreSerial::setSyncBreak(void) {
   sbi(*_ucsrb, _rxen);
   sbi(*_ucsrb, _txen);
   sbi(*_ucsrb, _rxcie);
-  DebugGPIOLow(PORTC, 5); // debug A5 PC5
 }
 
 size_t VivicoreSerial::pushToTxRingBuff(const uint8_t c) {

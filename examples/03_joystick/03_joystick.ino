@@ -21,8 +21,10 @@
 #define JX_PIN     (A2)
 #define JY_PIN     (A0)
 
-const uint16_t USER_FW_VER = 0x000D;
-const uint32_t BRANCH_TYPE = 0x00000003;
+const uint8_t  USER_FW_MAJOR_VER = 0x00;
+const uint8_t  USER_FW_MINOR_VER = 0x0D;
+const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
+const uint32_t BRANCH_TYPE       = 0x00000003;
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}

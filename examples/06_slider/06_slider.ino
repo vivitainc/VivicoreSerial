@@ -16,8 +16,10 @@
 #define AD_PRESCALER_64  (bit(ADPS2) | bit(ADPS1))
 #define AD_PRESCALER_128 (bit(ADPS2) | bit(ADPS1) | bit(ADPS0))
 
-const uint16_t USER_FW_VER = 0x0009;
-const uint32_t BRANCH_TYPE = 0x00000006;
+const uint8_t  USER_FW_MAJOR_VER = 0x00;
+const uint8_t  USER_FW_MINOR_VER = 0x09;
+const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
+const uint32_t BRANCH_TYPE       = 0x00000006;
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}

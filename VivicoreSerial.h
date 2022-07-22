@@ -54,65 +54,58 @@
  * @example 0B_led.ino
  */
 
+#include <viviware.h>
+
 #ifndef VIVICORESERIAL_H
-#define VIVICORESERIAL_H
+#  define VIVICORESERIAL_H
 
 /** @cond */
-#define BOARD_REV_FP1_EVT (1)
-#define BOARD_REV_FP1_DVT (2)
-#define BOARD_REV_FP1_PVT (3)
-#define BOARD_REV         (BOARD_REV_FP1_DVT)
+#  define BOARD_REV_FP1_EVT (1)
+#  define BOARD_REV_FP1_DVT (2)
+#  define BOARD_REV_FP1_PVT (3)
+#  define BOARD_REV         (BOARD_REV_FP1_DVT)
 
-#define BOARD_TYPE_BRANCH (0)
-#define BOARD_TYPE_CUSTOM (1)
-#ifndef BOARD_TYPE
-#  define BOARD_TYPE (BOARD_TYPE_BRANCH)
-#endif
+#  ifndef BOARD_TYPE
+#    define BOARD_TYPE (BOARD_TYPE_BRANCH)
+#  endif
 
-#if (BOARD_TYPE == BOARD_TYPE_CUSTOM)
-#  define CORE_COMM_UART_PORT (1)
-#  define SKIP_VERIFY_BRANCH_TYPE
-#else
-#  define CORE_COMM_UART_PORT (0)
-#endif
+#  if (BOARD_TYPE == BOARD_TYPE_DEPRECATED_CUSTOM)
+#    define CORE_COMM_UART_PORT (1)
+#    define SKIP_VERIFY_BRANCH_TYPE
+#  elif (BOARD_TYPE == BOARD_TYPE_CUSTOM)
+#    define CORE_COMM_UART_PORT (1)
+#    define SKIP_VERIFY_BRANCH_TYPE
+//#  define SWITCH_POWER_ENABLE_PIN // TODO:
+#  elif (BOARD_TYPE == BOARD_TYPE_USER_BRANCH)
+#    define CORE_COMM_UART_PORT (0)
+#    define SKIP_VERIFY_BRANCH_TYPE
+#  else
+#    define CORE_COMM_UART_PORT (0)
+#  endif
 
-#include <Arduino.h>
-#include "CommunicationProtocol.h"
-#include "VivicoreSerialDataCode.h"
-#include "VivicoreSerialVersion.h"
-#include "VivicoreSerialDebug.h"
+#  include <Arduino.h>
+#  include "CommunicationProtocol.h"
+#  include "VivicoreSerialDataCode.h"
+#  include "VivicoreSerialVersion.h"
+#  include "VivicoreSerialDebug.h"
 
-// Below pins are defined on pins_arduino.h included in Arduino.h
-#ifndef PIN_VIVIWARE_DEBUG_LED
-#  define PIN_VIVIWARE_DEBUG_LED (6)
-#endif
-#ifndef PIN_VIVIWARE_EN_RX
-#  define PIN_VIVIWARE_EN_RX (7)
-#endif
-#ifndef PIN_VIVIWARE_EN_TX
-#  define PIN_VIVIWARE_EN_TX (8)
-#endif
-#ifndef PIN_VIVIWARE_EN_PWR
-#  define PIN_VIVIWARE_EN_PWR (A3)
-#endif
+#  define NUM_SERIAL_BYTES (10)
+#  define NUM_BRTYPE_BYTES (4)
 
-#define NUM_SERIAL_BYTES (10)
-#define NUM_BRTYPE_BYTES (4)
-
-#define NUM_MAX_TEMP_BUFF (30) // maximum byte of tempBuffer
-#define NUM_MAX_READ_BUFF (64) // To be removed: maximum byte of RingBuffer<unsigned char>
+#  define NUM_MAX_TEMP_BUFF (30) // maximum byte of tempBuffer
+#  define NUM_MAX_READ_BUFF (64) // To be removed: maximum byte of RingBuffer<unsigned char>
 
 // Define constants and variables for buffering incoming serial data.  We're
 // using a ring buffer (I think), in which head is the index of the location
 // to which to write the next incoming character and tail is the index of the
 // location from which to read.
-#if (RAMEND < 1000)
-#  define SERIAL_BUFFER_SIZE (1UL << 4)
-#else
-#  define SERIAL_BUFFER_SIZE (1UL << 6)
-#endif
+#  if (RAMEND < 1000)
+#    define SERIAL_BUFFER_SIZE (1UL << 4)
+#  else
+#    define SERIAL_BUFFER_SIZE (1UL << 6)
+#  endif
 
-#define RING_PKT_BUFFER_SIZE (10)
+#  define RING_PKT_BUFFER_SIZE (10)
 
 template <typename T, size_t N> size_t countof(const T (&)[N]) {
   return N;

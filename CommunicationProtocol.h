@@ -31,19 +31,29 @@ extern "C" {
 #include <inttypes.h>
 
 /**
- * @brief BLE communication protocol version
+ * @brief BLE communication protocol major version
  *
- * Higher byte of spec version should be incremented if any of the following changes is applied.
+ * The major version should be incremented if any of the following changes is applied.
  * - New BLE services/characteristics are added
  * - Any of the BLE services/characteristics is removed and it influences the behavior
  * - Any of the BLE characteristics permission is changed and it influences the behavior
  * - Internal structure and/or member of packet for any command is added, removed, or changed, which influences the
  * total system behavior
+ */
+#define BLE_PROTOCOL_MAJOR_VERSION (uint8_t)(0x07)
+
+/**
+ * @brief BLE communication protocol minor version
  *
- * Lower byte of spec version should be incremented if any of the following changes is applied.
+ * The minor version should be incremented if any of the following changes is applied.
  * - Internal structure and/or member of packet for any command is added, removed, or changed
  */
-#define BLE_PROTOCOL_VERSION (uint16_t)(0x0700)
+#define BLE_PROTOCOL_MINOR_VERSION (uint8_t)(0x00)
+
+/** @cond */
+#define BLE_PROTOCOL_VERSION \
+  (uint16_t)(((uint16_t)BLE_PROTOCOL_MAJOR_VERSION << 8) + ((uint16_t)BLE_PROTOCOL_MINOR_VERSION))
+/** @endcond */
 
 /**
  * @brief Maximum packet size for BLE communication protocol
@@ -96,15 +106,25 @@ typedef enum {
 /** @endcond */
 
 /**
- * @brief UART communication protocol version
+ * @brief UART communication protocol major version
  *
- * Higher byte of spec version should be incremented if any of the following changes is applied.
+ * The major version should be incremented if any of the following changes is applied.
  * - Any of the UART configuration like baudrate is changed and it influences the behavior
+ */
+#define UART_PROTOCOL_MAJOR_VERSION (uint8_t)(0x07)
+
+/**
+ * @brief UART communication protocol minor version
  *
- * Lower byte of spec version should be incremented if any of the following changes is applied.
+ * The minor version should be incremented if any of the following changes is applied.
  * - The internal structure and/or member of packet for any command is added, removed, or changedh
  */
-#define UART_PROTOCOL_VERSION (uint16_t)(0x0700)
+#define UART_PROTOCOL_MINOR_VERSION (uint8_t)(0x00)
+
+/** @cond */
+#define UART_PROTOCOL_VERSION \
+  (uint16_t)(((uint16_t)UART_PROTOCOL_MAJOR_VERSION << 8) + ((uint16_t)UART_PROTOCOL_MINOR_VERSION))
+/** @endcond */
 
 /** @cond */
 // DC_INI is supported on this version or later

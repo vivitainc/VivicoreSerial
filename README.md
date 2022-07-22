@@ -78,6 +78,9 @@ This instruction describes how to setup Arduino IDE to build VIVIWARE Cell Custo
 Refer to [README](https://github.com/vivitainc/branch_cell/blob/develop/README.md) for library developer.
 
 # VivicoreSerial version history on Library Manager
+- 3.1.0 : Add features or fix issues as the following
+    - Support VIVIWARE Cell Custom v3 board with [custom_cell_board 6.2.0](https://github.com/vivitainc/custom_cell_boards/releases/tag/6.2.0) or later
+    - Support VIVIWARE Cell UserBranch with [custom_cell_board 6.1.0](https://github.com/vivitainc/custom_cell_boards/releases/tag/6.1.0) or later
 - 3.0.0 : Add features or fix issues as the following
     - Remove setOverrideIni and use write before begin to override DC_INI
 - 2.0.0 : Add features or fix issues as the following

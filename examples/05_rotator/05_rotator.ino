@@ -1,8 +1,6 @@
 #define MIN_LIBRARY_VER_BUILD_NO (0x0012)
 #include <VivicoreSerial.h>
 
-//#define DUMMY_DELTA        // For debug purpose only
-
 #define CHATTERING_WORKAROUND // Enable workaround to exclude chattering
 
 #define PIN_PULSE_A (A0) // Hardware spec for FP1
@@ -10,24 +8,26 @@
 #define PIN_SW      (2)  // Hardware spec for FP1
 
 #define CNT_FIX_INTERVAL_MS (30)
-#define MIN_VALUE           (0)
-#define MAX_VALUE           (100)
-#define DELTA_MAX           (MAX_VALUE / 2)
-#define DELTA_MIN           ((-1) * (DELTA_MAX))
-#define INITIAL_VAL         (DELTA_MIN)
+#define ABS_MAX             (100)
+#define MIN_VALUE           ((-1) * (ABS_MAX))
+#define MAX_VALUE           (ABS_MAX)
+#define INITIAL_VAL         (0)
 
 #define DEFAULT_RESET (0)
-#define DEFAULT_WRAP  (0)
+#define DEFAULT_WRAP  (1)
 
-const uint16_t USER_FW_VER = 0x000B;
-const uint32_t BRANCH_TYPE = 0x00000005; // Branch index number on vivitainc/ViviParts.git
+const uint8_t  USER_FW_MAJOR_VER = 0x01;
+const uint8_t  USER_FW_MINOR_VER = 0x01;
+const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
+const uint32_t BRANCH_TYPE       = 0x00000005; // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}
-  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1},                      // 1: Button
-  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE}, // 2: Value
-  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, 0, 1, DEFAULT_RESET},        // 3: Reset
-  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, 0, 1, DEFAULT_WRAP},         // 4: Wrap
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1}, // 1: Button
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_1BYTE, MIN_VALUE, MAX_VALUE,
+   INITIAL_VAL},                                                                                     // 2: Value
+  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, 0, 1, DEFAULT_RESET}, // 3: Reset
+  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, 0, 1, DEFAULT_WRAP},  // 4: Wrap
 };
 
 static signed int encTable[0x10] = {};
@@ -147,13 +147,14 @@ static bool updateButton(void) {
 }
 
 static void sendToCore(signed int delta, const bool resetOn, const bool wrapEnabled) {
+  bool              dbgOut     = false;
   static signed int keptVal    = INITIAL_VAL;
-  static uint8_t    prevSndVal = map(INITIAL_VAL, DELTA_MIN, DELTA_MAX, MIN_VALUE, MAX_VALUE);
+  static int8_t     prevSndVal = INITIAL_VAL;
 
   bool willSend = updateButton();
 
   if (delta != 0 || resetOn) {
-    uint8_t sndVal = 0;
+    int8_t sndVal = 0;
     if (resetOn) {
       keptVal = INITIAL_VAL;
     }
@@ -166,7 +167,7 @@ static void sendToCore(signed int delta, const bool resetOn, const bool wrapEnab
     DebugPlainPrint0(delta);
     DebugPlainPrint0(",");
 
-    delta = constrain(delta, DELTA_MIN, DELTA_MAX);
+    delta = constrain(delta, MIN_VALUE, MAX_VALUE);
 
     keptVal += delta;
     DebugPlainPrint0("keptVal:");
@@ -176,20 +177,18 @@ static void sendToCore(signed int delta, const bool resetOn, const bool wrapEnab
     DebugPlainPrint0(wrapEnabled);
     DebugPlainPrint0(":");
 
-    if (abs(keptVal) > DELTA_MAX) {
+    if (abs(keptVal) > ABS_MAX) {
       if (wrapEnabled) {
         const signed int sign           = (keptVal < 0) ? -1 : +1;
-        const signed int signedLimitVal = sign * DELTA_MAX;
-        const signed int outlyingVal    = (abs(keptVal) % DELTA_MAX - 1) * sign;
+        const signed int signedLimitVal = sign * ABS_MAX;
+        const signed int outlyingVal    = (abs(keptVal) % ABS_MAX - 1) * sign;
         keptVal                         = (-1) * signedLimitVal + outlyingVal;
       } else {
-        keptVal = constrain(keptVal, DELTA_MIN, DELTA_MAX);
+        keptVal = constrain(keptVal, MIN_VALUE, MAX_VALUE);
       }
     }
-    DebugPlainPrint0(keptVal);
-    DebugPlainPrint0(",");
 
-    sndVal = map(keptVal, DELTA_MIN, DELTA_MAX, MIN_VALUE, MAX_VALUE);
+    sndVal = (int8_t)keptVal;
     DebugPlainPrint0("sndVal:");
     DebugPlainPrint0(sndVal);
     DebugPlainPrint0(",");
@@ -199,11 +198,15 @@ static void sendToCore(signed int delta, const bool resetOn, const bool wrapEnab
       Vivicore.write(iValue, sndVal);
       willSend = true;
     }
+    dbgOut = true;
   }
 
   if (willSend) {
     Vivicore.flush();
     DebugPlainPrint0("snt");
+    dbgOut = true;
+  }
+  if (dbgOut) {
     DebugPlainPrintln0("");
   }
 }
@@ -257,16 +260,6 @@ void loop() {
   // Dont care about millis overflows https://garretlab.web.fc2.com/arduino/lab/millis/
   if (curMills - prevMills > CNT_FIX_INTERVAL_MS) {
     prevMills = curMills;
-#if defined(DUMMY_COUNTER)
-    static signed int snd_cnt = 0;
-    static signed int step    = 1;
-    delta                     = snd_cnt;
-    snd_cnt += step;
-    if (snd_cnt > MAX_VALUE || snd_cnt < MIN_VALUE) {
-      step *= -1;
-      snd_cnt += (step * 2);
-    }
-#endif // DUMMY_COUNTER
 
     bool resetOn = readFromCore(wrapEnabled);
     sendToCore(delta, resetOn, wrapEnabled);

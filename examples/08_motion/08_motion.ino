@@ -4,17 +4,19 @@
 #include "lsm6ds3_reg.h"
 #include "lsm6ds3tr_c_reg.h"
 
-#define MAX_VALUE     (100)
-#define MIN_VALUE     (-1 * MAX_VALUE)
-#define MAX_ACCEL_RAW (2000)                 // Unit: mG force
-#define MAX_ACCEL     (MAX_ACCEL_RAW / 1000) // Unit: G force
-#define MAX_GYRO_RAW  (500000)               // Unit: mdeg/s
-#define MAX_GYRO      (MAX_GYRO_RAW / 1000)  // Unit: deg/s
-#define SLAVE_ADR     (0x6B)
-#define BOOT_TIME     (20) // Unit: ms
+#define MAX_VALUE (100)
+#define MIN_VALUE (-1 * MAX_VALUE)
+#define MAX_ACCEL (2)   // Unit: G force
+#define MAX_GYRO  (500) // Unit: deg/s
+#define MAX_RAW   (INT16_MAX)
+#define MIN_RAW   (INT16_MIN)
+#define SLAVE_ADR (0x6B)
+#define BOOT_TIME (20) // Unit: ms
 
-const uint16_t USER_FW_VER = 0x000D;
-const uint32_t BRANCH_TYPE = 0x00000008;
+const uint8_t  USER_FW_MAJOR_VER = 0x00;
+const uint8_t  USER_FW_MINOR_VER = 0x0E;
+const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
+const uint32_t BRANCH_TYPE       = 0x00000008;
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}
@@ -30,7 +32,6 @@ const dcInfo_t dcInfo[] = {
 };
 
 /* Initialize mems driver interface */
-typedef float_t (*CONVERT_UNIT)(int16_t raw);
 typedef union {
   int16_t i16bit[3];
   uint8_t u8bit[6];
@@ -42,6 +43,11 @@ static stmdev_ctx_t dev_ctx = {
   writeReg, readReg,
   NULL, // Customizable optional pointer
 };
+
+static inline float mapf(const float x, const float in_min, const float in_max, const float out_min,
+                         const float out_max) {
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 /* Write generic device register (platform dependent) */
 static int32_t writeReg(void *, uint8_t reg, uint8_t *bufp, uint16_t len) {
@@ -202,22 +208,8 @@ static bool isSensorDataReady(void) {
   return ((acel_ready != 0) && (gyro_ready != 0));
 }
 
-static void getAccelData(const uint8_t maxG, float *accelValues) {
-  static const CONVERT_UNIT converters[] = {
-    lsm6ds3_from_fs2g_to_mg,  // LSM6DS3_2g  = 0
-    lsm6ds3_from_fs16g_to_mg, // LSM6DS3_16g = 1
-    lsm6ds3_from_fs4g_to_mg,  // LSM6DS3_4g  = 2
-    lsm6ds3_from_fs8g_to_mg,  // LSM6DS3_8g  = 3
-  };
-  static const CONVERT_UNIT convertersTrc[] = {
-    lsm6ds3tr_c_from_fs2g_to_mg,  // LSM6DS3TR_C_2g  = 0
-    lsm6ds3tr_c_from_fs16g_to_mg, // LSM6DS3TR_C_16g = 1
-    lsm6ds3tr_c_from_fs4g_to_mg,  // LSM6DS3TR_C_4g  = 2
-    lsm6ds3tr_c_from_fs8g_to_mg,  // LSM6DS3TR_C_8g  = 3
-  };
-  const uint8_t      accel          = getAccelCode(maxG);
-  const CONVERT_UNIT accelConverter = (whoamI == LSM6DS3_ID) ? converters[accel] : convertersTrc[accel];
-  axis3bit16_t       rawAccel       = {};
+static void getAccelData(int16_t *accelValues) {
+  axis3bit16_t rawAccel = {};
 
   /* Read acceleration field data */
   if (whoamI == LSM6DS3_ID) {
@@ -226,34 +218,14 @@ static void getAccelData(const uint8_t maxG, float *accelValues) {
     lsm6ds3tr_c_acceleration_raw_get(&dev_ctx, rawAccel.u8bit);
   }
 
-  /* Convert unit and change the direction of axis for motion branch */
-  accelValues[0] = accelConverter(rawAccel.i16bit[1]);
-  accelValues[1] = accelConverter(rawAccel.i16bit[0]) * (-1.0);
-  accelValues[2] = accelConverter(rawAccel.i16bit[2]) * (-1.0);
+  /* Change the direction of axis for motion branch */
+  accelValues[0] = rawAccel.i16bit[1];
+  accelValues[1] = rawAccel.i16bit[0] * (-1);
+  accelValues[2] = rawAccel.i16bit[2] * (-1);
 }
 
-static void getGyroData(const uint16_t maxDps, float *gyroValues) {
-  static const CONVERT_UNIT converters[] = {
-    lsm6ds3_from_fs250dps_to_mdps,  // LSM6DS3_250dps  = 0
-    lsm6ds3_from_fs125dps_to_mdps,  // LSM6DS3_125dps  = 1
-    lsm6ds3_from_fs500dps_to_mdps,  // LSM6DS3_500dps  = 2
-    NULL,                           // No dps
-    lsm6ds3_from_fs1000dps_to_mdps, // LSM6DS3_1000dps = 4
-    NULL,                           // No dps
-    lsm6ds3_from_fs2000dps_to_mdps, // LSM6DS3_2000dps = 6
-  };
-  static const CONVERT_UNIT convertersTrc[] = {
-    lsm6ds3tr_c_from_fs250dps_to_mdps,  // LSM6DS3TR_C_250dps  = 0
-    lsm6ds3tr_c_from_fs125dps_to_mdps,  // LSM6DS3TR_C_125dps  = 1
-    lsm6ds3tr_c_from_fs500dps_to_mdps,  // LSM6DS3TR_C_500dps  = 2
-    NULL,                               // No dps
-    lsm6ds3tr_c_from_fs1000dps_to_mdps, // LSM6DS3TR_C_1000dps = 4
-    NULL,                               // No dps
-    lsm6ds3tr_c_from_fs2000dps_to_mdps, // LSM6DS3TR_C_2000dps = 6
-  };
-  const uint8_t      gyro          = getGyroCode(maxDps);
-  const CONVERT_UNIT gyroConverter = (whoamI == LSM6DS3_ID) ? converters[gyro] : convertersTrc[gyro];
-  axis3bit16_t       rawAngular    = {};
+static void getGyroData(int16_t *gyroValues) {
+  axis3bit16_t rawAngular = {};
 
   /* Read angular rate field data */
   if (whoamI == LSM6DS3_ID) {
@@ -262,10 +234,10 @@ static void getGyroData(const uint16_t maxDps, float *gyroValues) {
     lsm6ds3tr_c_angular_rate_raw_get(&dev_ctx, rawAngular.u8bit);
   }
 
-  /* Convert unit and change the direction of axis for motion branch */
-  gyroValues[0] = gyroConverter(rawAngular.i16bit[1]) * (-1.0);
-  gyroValues[1] = gyroConverter(rawAngular.i16bit[0]);
-  gyroValues[2] = gyroConverter(rawAngular.i16bit[2]);
+  /* Change the direction of axis for motion branch */
+  gyroValues[0] = rawAngular.i16bit[1] * (-1);
+  gyroValues[1] = rawAngular.i16bit[0];
+  gyroValues[2] = rawAngular.i16bit[2];
 }
 
 void setup() {
@@ -276,13 +248,16 @@ void setup() {
 
 void loop() {
   static const uint8_t DC_NUM               = sizeof(dcInfo) / sizeof(dcInfo[0]);
-  static const float   maxRawValues[DC_NUM] = {
-    MAX_ACCEL_RAW, MAX_ACCEL_RAW, MAX_ACCEL_RAW, MAX_GYRO_RAW, MAX_GYRO_RAW, MAX_GYRO_RAW,
+  static const int16_t maxRawValues[DC_NUM] = {
+    MAX_RAW, MAX_RAW, MAX_RAW, MAX_RAW, MAX_RAW, MAX_RAW,
+  };
+  static const int16_t minRawValues[DC_NUM] = {
+    MIN_RAW, MIN_RAW, MIN_RAW, MIN_RAW, MIN_RAW, MIN_RAW,
   };
   static int8_t prevValues[DC_NUM] = {
     INT8_MIN, INT8_MIN, INT8_MIN, INT8_MIN, INT8_MIN, INT8_MIN,
   };
-  float readValues[DC_NUM] = {};
+  int16_t readValues[DC_NUM] = {};
 
   delay(30);
 
@@ -290,15 +265,16 @@ void loop() {
   if (!isSensorDataReady()) {
     return;
   }
-  getAccelData(MAX_ACCEL, &readValues[0]);
-  getGyroData(MAX_GYRO, &readValues[3]);
+  getAccelData(&readValues[0]);
+  getGyroData(&readValues[3]);
 
   for (uint8_t i = 0; i < DC_NUM; i++) {
-    const float  minRawValue      = -1.0 * maxRawValues[i];
-    const float  maxRawValue      = maxRawValues[i];
-    const long   constrainedValue = (long)(constrain(readValues[i], minRawValue, maxRawValue));
-    const int8_t mappedValue =
-      (int8_t)map(constrainedValue, (long)minRawValue, (long)maxRawValue, MIN_VALUE, MAX_VALUE);
+    const float minRawValue      = minRawValues[i];
+    const float maxRawValue      = maxRawValues[i];
+    const long  constrainedValue = (long)(constrain(readValues[i], minRawValue, maxRawValue));
+    const float mappedFloatValue =
+      mapf((float)constrainedValue, (float)minRawValue, (float)maxRawValue, (float)MIN_VALUE, (float)MAX_VALUE);
+    const int8_t mappedValue = (int8_t)round(mappedFloatValue);
 
     if (prevValues[i] != mappedValue) {
       prevValues[i] = mappedValue;
