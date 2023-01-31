@@ -68,11 +68,21 @@ $(function() {
 <div class="fragment"><div class="line">#define MIN_LIBRARY_VER_BUILD_NO (0x0012)</div>
 <div class="line">#include &lt;VivicoreSerial.h&gt;</div>
 <div class="line"> </div>
-<div class="line">#define CHATTERING_WORKAROUND // Enable workaround to exclude chattering</div>
+<div class="line">// #define CHATTERING_WORKAROUND // Enable workaround to exclude chattering</div>
+<div class="line">// #define CHECK_PULSE_MISS_DETECTION // Enable check if pulse detection miss happens</div>
 <div class="line"> </div>
-<div class="line">#define PIN_PULSE_A (A0) // Hardware spec for FP1</div>
-<div class="line">#define PIN_PULSE_B (A2) // Hardware spec for FP1</div>
-<div class="line">#define PIN_SW      (2)  // Hardware spec for FP1</div>
+<div class="line">#define HW_PIN_PULSE_A (A0)    // Hardware spec for FP1</div>
+<div class="line">#define HW_PIN_PULSE_B (A2)    // Hardware spec for FP1</div>
+<div class="line">#define HW_PORT_PULSES (PINC)  // Hardware spec for FP1 (PulseA &amp; PulseB)</div>
+<div class="line">#define HW_BIT_PULSE_A (PINC0) // Hardware spec for FP1 (PulseA = A0 PC0)</div>
+<div class="line">#define HW_BIT_PULSE_B (PINC2) // Hardware spec for FP1 (PulseB = A2 PC2)</div>
+<div class="line">#define HW_PIN_SW      (2)     // Hardware spec for FP1</div>
+<div class="line"> </div>
+<div class="line">#define BIT_PULSE_A         (B00000010)</div>
+<div class="line">#define BIT_PULSE_B         (B00000001)</div>
+<div class="line">#define BITS_PULSE_A_B      (BIT_PULSE_A | BIT_PULSE_B)</div>
+<div class="line">#define CLICK_PULSE         (BIT_PULSE_B) // BIT_PULSE_A or BIT_PULSE_B or BITS_PULSE_A_B to update countVal</div>
+<div class="line">#define BITS_PRE_CUR_PULSES (B00001111)</div>
 <div class="line"> </div>
 <div class="line">#define CNT_FIX_INTERVAL_MS (30)</div>
 <div class="line">#define ABS_MAX             (100)</div>
@@ -83,8 +93,11 @@ $(function() {
 <div class="line">#define DEFAULT_RESET (0)</div>
 <div class="line">#define DEFAULT_WRAP  (1)</div>
 <div class="line"> </div>
+<div class="line">#define TIMER_TRIGGER_US    (256L) // (1024L)</div>
+<div class="line">#define TIMER_TRIGGER_COUNT (TIMER_TRIGGER_US * ((F_CPU / 1L) / 1000L / 1000L))</div>
+<div class="line"> </div>
 <div class="line">const uint8_t  USER_FW_MAJOR_VER = 0x01;</div>
-<div class="line">const uint8_t  USER_FW_MINOR_VER = 0x01;</div>
+<div class="line">const uint8_t  USER_FW_MINOR_VER = 0x02;</div>
 <div class="line">const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) &lt;&lt; 8) + ((uint16_t)(USER_FW_MINOR_VER)));</div>
 <div class="line">const uint32_t BRANCH_TYPE       = 0x00000005; // Branch index number on vivitainc/ViviParts.git</div>
 <div class="line"> </div>
@@ -97,7 +110,9 @@ $(function() {
 <div class="line">  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, 0, 1, DEFAULT_WRAP},  // 4: Wrap</div>
 <div class="line">};</div>
 <div class="line"> </div>
-<div class="line">static signed int encTable[0x10] = {};</div>
+<div class="line">static signed int          encTable[0x10] = {};</div>
+<div class="line">static volatile signed int countVal       = INITIAL_VAL;</div>
+<div class="line">static volatile bool       wrapEnabled    = (bool)DEFAULT_WRAP;</div>
 <div class="line"> </div>
 <div class="line">typedef enum {</div>
 <div class="line">  iButton = 1,</div>
@@ -106,7 +121,16 @@ $(function() {
 <div class="line">  iWrap,</div>
 <div class="line">} dcInfoIndex_t;</div>
 <div class="line"> </div>
-<div class="line">static void setEncTable(void) {</div>
+<div class="line">#if defined(CHECK_PULSE_MISS_DETECTION)</div>
+<div class="line">struct RotateEle_t {</div>
+<div class="line">  uint8_t right;</div>
+<div class="line">  uint8_t left;</div>
+<div class="line">};</div>
+<div class="line"> </div>
+<div class="line">RotateEle_t rotate[B100] = {};</div>
+<div class="line">#endif</div>
+<div class="line"> </div>
+<div class="line">static inline void setEncTable(void) {</div>
 <div class="line">  // Clockwise</div>
 <div class="line">  encTable[B00000010] = +1;</div>
 <div class="line">  encTable[B00001011] = +1;</div>
@@ -117,89 +141,120 @@ $(function() {
 <div class="line">  encTable[B00000111] = -1;</div>
 <div class="line">  encTable[B00001110] = -1;</div>
 <div class="line">  encTable[B00001000] = -1;</div>
+<div class="line"> </div>
+<div class="line">#if defined(CHECK_PULSE_MISS_DETECTION)</div>
+<div class="line">  // Clockwise</div>
+<div class="line">  rotate[B00].right = B10;</div>
+<div class="line">  rotate[B10].right = B11;</div>
+<div class="line">  rotate[B11].right = B01;</div>
+<div class="line">  rotate[B01].right = B00;</div>
+<div class="line">  // Counter-clockwise</div>
+<div class="line">  rotate[B00].left = B01;</div>
+<div class="line">  rotate[B10].left = B00;</div>
+<div class="line">  rotate[B11].left = B10;</div>
+<div class="line">  rotate[B01].left = B11;</div>
+<div class="line">#endif</div>
 <div class="line">}</div>
 <div class="line"> </div>
-<div class="line">static uint8_t getEncVal(void) {</div>
-<div class="line">  static uint8_t encVal = 0;</div>
+<div class="line">static inline signed int adjustForClick(const signed int curDelta, const uint8_t encVal) {</div>
+<div class="line">  signed int     adjustedDelta = 0;</div>
+<div class="line">  const uint8_t  curPulse      = encVal &amp; CLICK_PULSE;</div>
+<div class="line">  static uint8_t prePulse      = curPulse;</div>
 <div class="line"> </div>
-<div class="line">  cli();</div>
-<div class="line">  uint8_t pulseA = digitalRead(PIN_PULSE_A);</div>
-<div class="line">  uint8_t pulseB = digitalRead(PIN_PULSE_B);</div>
-<div class="line">  sei();</div>
-<div class="line"> </div>
-<div class="line">  encVal = (encVal &lt;&lt; 2) + ((pulseA &lt;&lt; 1) + pulseB);</div>
-<div class="line">  return encVal;</div>
-<div class="line">}</div>
-<div class="line"> </div>
-<div class="line">static signed int processEncVal(const uint8_t encVal) {</div>
-<div class="line">  signed int delta = 0;</div>
-<div class="line">#if defined(CHATTERING_WORKAROUND)</div>
-<div class="line">  signed int curDelta = encTable[encVal &amp; B00001111];</div>
-<div class="line">  if (curDelta != 0) {</div>
-<div class="line">    // Workaround to exclude chattering</div>
-<div class="line">    if (curDelta * (-1) != encTable[(encVal &gt;&gt; 2) &amp; B00001111]) {</div>
-<div class="line">      delta = curDelta;</div>
-<div class="line">      if (delta &gt; 0) {</div>
-<div class="line">        DebugBinPrint0(encVal);</div>
-<div class="line">        DebugPlainPrintln0(&quot;,CW&quot;);</div>
-<div class="line">      } else if (delta &lt; 0) {</div>
-<div class="line">        DebugBinPrint0(encVal);</div>
-<div class="line">        DebugPlainPrintln0(&quot;,CCW&quot;);</div>
-<div class="line">      }</div>
-<div class="line">    } else {</div>
-<div class="line">      // DebugBinPrint0(encVal);</div>
-<div class="line">      // DebugPlainPrintln0(&quot;,None&quot;);</div>
-<div class="line">    }</div>
-<div class="line">  }</div>
-<div class="line">#else  // CHATTERING_WORKAROUND</div>
-<div class="line">  switch (encVal &amp; B00001111) {</div>
-<div class="line">  case B00000010:</div>
-<div class="line">  case B00001011:</div>
-<div class="line">  case B00001101:</div>
-<div class="line">  case B00000100:</div>
-<div class="line">    delta++;</div>
-<div class="line">    DebugBinPrint0(encVal);</div>
-<div class="line">    DebugPlainPrintln0(&quot;,CW&quot;);</div>
-<div class="line">    break;</div>
-<div class="line">  case B00000001:</div>
-<div class="line">  case B00000111:</div>
-<div class="line">  case B00001110:</div>
-<div class="line">  case B00001000:</div>
-<div class="line">    delta--;</div>
-<div class="line">    DebugBinPrint0(encVal);</div>
-<div class="line">    DebugPlainPrintln0(&quot;,CCW&quot;);</div>
-<div class="line">    break;</div>
-<div class="line">  default:</div>
-<div class="line">    // DebugBinPrint0(encVal);</div>
-<div class="line">    // DebugPlainPrintln0(&quot;,None&quot;);</div>
-<div class="line">    break;</div>
-<div class="line">  }</div>
-<div class="line">#endif // CHATTERING_WORKAROUND</div>
-<div class="line">  return delta;</div>
-<div class="line">}</div>
-<div class="line"> </div>
-<div class="line">static signed int adjustDelta(const signed int curDelta) {</div>
-<div class="line">  static signed int prevDelta     = 0;</div>
-<div class="line">  signed int        adjustedDelta = 0;</div>
-<div class="line"> </div>
-<div class="line">  if (curDelta != 0) {</div>
-<div class="line">    if (prevDelta == curDelta) {</div>
-<div class="line">      adjustedDelta = curDelta;</div>
-<div class="line">      prevDelta     = 0;</div>
-<div class="line">    } else {</div>
-<div class="line">      prevDelta = curDelta;</div>
-<div class="line">    }</div>
+<div class="line">  if (prePulse != curPulse) {</div>
+<div class="line">    prePulse      = curPulse;</div>
+<div class="line">    adjustedDelta = curDelta;</div>
 <div class="line">  }</div>
 <div class="line"> </div>
 <div class="line">  return adjustedDelta;</div>
 <div class="line">}</div>
 <div class="line"> </div>
+<div class="line">static inline uint8_t getEncVal(void) {</div>
+<div class="line">  static uint8_t encVal = 0;</div>
+<div class="line"> </div>
+<div class="line">  // cli(); // no needed as this function is called in interrupt</div>
+<div class="line">  const uint8_t regPortC = HW_PORT_PULSES;</div>
+<div class="line">  const uint8_t pulseA   = bitRead(regPortC, HW_BIT_PULSE_A); // digitalRead(HW_PIN_PULSE_A);</div>
+<div class="line">  const uint8_t pulseB   = bitRead(regPortC, HW_BIT_PULSE_B); // digitalRead(HW_PIN_PULSE_B);</div>
+<div class="line">  // sei(); // no needed as this function is called in interrupt</div>
+<div class="line"> </div>
+<div class="line">  const uint8_t curEncVal = (pulseA &lt;&lt; 1) + pulseB;</div>
+<div class="line">  encVal                  = (encVal &lt;&lt; 2) + curEncVal;</div>
+<div class="line"> </div>
+<div class="line">  return encVal;</div>
+<div class="line">}</div>
+<div class="line"> </div>
+<div class="line">static inline signed int fixCount(const signed int val) {</div>
+<div class="line">  signed int fixVal = val;</div>
+<div class="line">  if (val &lt; MIN_VALUE || val &gt; MAX_VALUE) {</div>
+<div class="line">    if (wrapEnabled) {</div>
+<div class="line">      if (val &lt; MIN_VALUE) {</div>
+<div class="line">        fixVal = MAX_VALUE - (abs(val - MIN_VALUE) - 1);</div>
+<div class="line">      } else if (val &gt; MAX_VALUE) {</div>
+<div class="line">        fixVal = MIN_VALUE + (abs(val - MAX_VALUE) - 1);</div>
+<div class="line">      }</div>
+<div class="line">    } else {</div>
+<div class="line">      fixVal = constrain(val, MIN_VALUE, MAX_VALUE);</div>
+<div class="line">    }</div>
+<div class="line">  }</div>
+<div class="line">  return fixVal;</div>
+<div class="line">}</div>
+<div class="line"> </div>
+<div class="line">static inline void processEncVal(void) {</div>
+<div class="line">  const uint8_t    encVal   = getEncVal();</div>
+<div class="line">  const signed int curDelta = encTable[encVal &amp; BITS_PRE_CUR_PULSES];</div>
+<div class="line"> </div>
+<div class="line">  static uint8_t preEncVal = 0;</div>
+<div class="line">  const uint8_t  prePulses = preEncVal &amp; BITS_PULSE_A_B;</div>
+<div class="line">  const uint8_t  curPulses = encVal &amp; BITS_PULSE_A_B;</div>
+<div class="line"> </div>
+<div class="line">  if (prePulses == curPulses) {</div>
+<div class="line">    // no need to update countVal if no pulse state change</div>
+<div class="line">    return;</div>
+<div class="line">  }</div>
+<div class="line"> </div>
+<div class="line">#if defined(CHECK_PULSE_MISS_DETECTION)</div>
+<div class="line">  if (rotate[prePulses].left != curPulses &amp;&amp; rotate[prePulses].right != curPulses) {</div>
+<div class="line">    // miss detection of a pulse edge</div>
+<div class="line">    DebugPlainPrintln0(&quot;+&quot;);</div>
+<div class="line">    DebugGPIOHigh(PORTC, 4); // debug A4 PC4</div>
+<div class="line">    DebugGPIOLow(PORTC, 4);  // debug A4 PC4</div>
+<div class="line">  }</div>
+<div class="line">#endif</div>
+<div class="line"> </div>
+<div class="line">  preEncVal = encVal;</div>
+<div class="line"> </div>
+<div class="line">  if (curDelta != 0) {</div>
+<div class="line">#if defined(CHATTERING_WORKAROUND)</div>
+<div class="line">    // Workaround to exclude chattering</div>
+<div class="line">    if (curDelta * (-1) == encTable[(encVal &gt;&gt; 2) &amp; BITS_PRE_CUR_PULSES]) {</div>
+<div class="line">      return;</div>
+<div class="line">    }</div>
+<div class="line">#endif</div>
+<div class="line">    if (curDelta &gt; 0) {</div>
+<div class="line">      DebugBinPrint0(encVal);</div>
+<div class="line">      DebugPlainPrintln0(&quot;,CW&quot;);</div>
+<div class="line">    } else if (curDelta &lt; 0) {</div>
+<div class="line">      DebugBinPrint0(encVal);</div>
+<div class="line">      DebugPlainPrintln0(&quot;,CCW&quot;);</div>
+<div class="line">    }</div>
+<div class="line">    const signed int delta = adjustForClick(curDelta, encVal);</div>
+<div class="line">    countVal += delta;</div>
+<div class="line">    countVal = fixCount(countVal);</div>
+<div class="line">  }</div>
+<div class="line">}</div>
+<div class="line"> </div>
+<div class="line">ISR(TIMER4_COMPA_vect) {</div>
+<div class="line">  DebugGPIOHigh(PORTC, 5); // debug A5 PC5</div>
+<div class="line">  processEncVal();</div>
+<div class="line">  DebugGPIOLow(PORTC, 5); // debug A5 PC5</div>
+<div class="line">}</div>
+<div class="line"> </div>
 <div class="line">static bool updateButton(void) {</div>
 <div class="line">  static uint8_t prevButtonState = 0;</div>
-<div class="line">  uint8_t        curButtonState  = 0;</div>
+<div class="line">  const uint8_t  curButtonState  = !digitalRead(HW_PIN_SW);</div>
 <div class="line">  bool           willSend        = false;</div>
 <div class="line"> </div>
-<div class="line">  curButtonState = !digitalRead(PIN_SW);</div>
 <div class="line">  if (curButtonState != prevButtonState) {</div>
 <div class="line">    DebugPlainPrint0(&quot;btn:&quot;);</div>
 <div class="line">    DebugPlainPrint0(curButtonState);</div>
@@ -213,72 +268,36 @@ $(function() {
 <div class="line">  return willSend;</div>
 <div class="line">}</div>
 <div class="line"> </div>
-<div class="line">static void sendToCore(signed int delta, const bool resetOn, const bool wrapEnabled) {</div>
-<div class="line">  bool              dbgOut     = false;</div>
-<div class="line">  static signed int keptVal    = INITIAL_VAL;</div>
-<div class="line">  static int8_t     prevSndVal = INITIAL_VAL;</div>
+<div class="line">static void sendToCore(const signed int curVal, const bool resetOn, const bool wrapEnabled) {</div>
+<div class="line">  static int8_t prevSndVal = INITIAL_VAL;</div>
+<div class="line">  const int8_t  sndVal     = (int8_t)curVal;</div>
 <div class="line"> </div>
 <div class="line">  bool willSend = updateButton();</div>
 <div class="line"> </div>
-<div class="line">  if (delta != 0 || resetOn) {</div>
-<div class="line">    int8_t sndVal = 0;</div>
-<div class="line">    if (resetOn) {</div>
-<div class="line">      keptVal = INITIAL_VAL;</div>
-<div class="line">    }</div>
-<div class="line"> </div>
-<div class="line">    DebugPlainPrint0(&quot;rst:&quot;);</div>
-<div class="line">    DebugPlainPrint0(resetOn);</div>
-<div class="line">    DebugPlainPrint0(&quot;,&quot;);</div>
-<div class="line"> </div>
-<div class="line">    DebugPlainPrint0(&quot;delta:&quot;);</div>
-<div class="line">    DebugPlainPrint0(delta);</div>
-<div class="line">    DebugPlainPrint0(&quot;,&quot;);</div>
-<div class="line"> </div>
-<div class="line">    delta = constrain(delta, MIN_VALUE, MAX_VALUE);</div>
-<div class="line"> </div>
-<div class="line">    keptVal += delta;</div>
-<div class="line">    DebugPlainPrint0(&quot;keptVal:&quot;);</div>
-<div class="line">    DebugPlainPrint0(keptVal);</div>
-<div class="line">    DebugPlainPrint0(&quot;,&quot;);</div>
+<div class="line">  if (prevSndVal != sndVal || resetOn) {</div>
 <div class="line">    DebugPlainPrint0(&quot;wrap=&quot;);</div>
 <div class="line">    DebugPlainPrint0(wrapEnabled);</div>
-<div class="line">    DebugPlainPrint0(&quot;:&quot;);</div>
-<div class="line"> </div>
-<div class="line">    if (abs(keptVal) &gt; ABS_MAX) {</div>
-<div class="line">      if (wrapEnabled) {</div>
-<div class="line">        const signed int sign           = (keptVal &lt; 0) ? -1 : +1;</div>
-<div class="line">        const signed int signedLimitVal = sign * ABS_MAX;</div>
-<div class="line">        const signed int outlyingVal    = (abs(keptVal) % ABS_MAX - 1) * sign;</div>
-<div class="line">        keptVal                         = (-1) * signedLimitVal + outlyingVal;</div>
-<div class="line">      } else {</div>
-<div class="line">        keptVal = constrain(keptVal, MIN_VALUE, MAX_VALUE);</div>
-<div class="line">      }</div>
-<div class="line">    }</div>
-<div class="line"> </div>
-<div class="line">    sndVal = (int8_t)keptVal;</div>
-<div class="line">    DebugPlainPrint0(&quot;sndVal:&quot;);</div>
+<div class="line">    DebugPlainPrint0(&quot;,&quot;);</div>
+<div class="line">    DebugPlainPrint0(&quot;rst=&quot;);</div>
+<div class="line">    DebugPlainPrint0(resetOn);</div>
+<div class="line">    DebugPlainPrint0(&quot;,&quot;);</div>
+<div class="line">    DebugPlainPrint0(&quot;sndVal=&quot;);</div>
 <div class="line">    DebugPlainPrint0(sndVal);</div>
 <div class="line">    DebugPlainPrint0(&quot;,&quot;);</div>
 <div class="line"> </div>
-<div class="line">    if (prevSndVal != sndVal || resetOn) {</div>
-<div class="line">      prevSndVal = sndVal;</div>
-<div class="line">      Vivicore.write(iValue, sndVal);</div>
-<div class="line">      willSend = true;</div>
-<div class="line">    }</div>
-<div class="line">    dbgOut = true;</div>
+<div class="line">    prevSndVal = sndVal;</div>
+<div class="line">    Vivicore.write(iValue, sndVal);</div>
+<div class="line">    willSend = true;</div>
 <div class="line">  }</div>
 <div class="line"> </div>
 <div class="line">  if (willSend) {</div>
 <div class="line">    Vivicore.flush();</div>
 <div class="line">    DebugPlainPrint0(&quot;snt&quot;);</div>
-<div class="line">    dbgOut = true;</div>
-<div class="line">  }</div>
-<div class="line">  if (dbgOut) {</div>
 <div class="line">    DebugPlainPrintln0(&quot;&quot;);</div>
 <div class="line">  }</div>
 <div class="line">}</div>
 <div class="line"> </div>
-<div class="line">static bool readFromCore(bool &amp;wrapEnabled) {</div>
+<div class="line">static bool readFromCore(void) {</div>
 <div class="line">  const AvailableNum_t cnt     = Vivicore.available();</div>
 <div class="line">  bool                 resetOn = (bool)DEFAULT_RESET;</div>
 <div class="line"> </div>
@@ -302,35 +321,49 @@ $(function() {
 <div class="line">  return resetOn;</div>
 <div class="line">}</div>
 <div class="line"> </div>
+<div class="line">static void startTimer4Interrupt() {</div>
+<div class="line">  // Timer 4 settings</div>
+<div class="line">  TCCR4A = 0;</div>
+<div class="line">  TCCR4B = bit(WGM42) | bit(CS40); // CTC mode, No prescaling</div>
+<div class="line">  OCR4A  = TIMER_TRIGGER_COUNT;    // ISR trigger counter value</div>
+<div class="line">  TIMSK4 = bit(OCIE4A);            // Output Compare A Match Interrupt Enable</div>
+<div class="line">}</div>
+<div class="line"> </div>
 <div class="line">void setup() {</div>
 <div class="line">  Vivicore.begin(BRANCH_TYPE, USER_FW_VER, dcInfo, countof(dcInfo), MIN_LIBRARY_VER_BUILD_NO);</div>
 <div class="line"> </div>
-<div class="line">  pinMode(PIN_PULSE_A, INPUT);</div>
-<div class="line">  pinMode(PIN_PULSE_B, INPUT);</div>
-<div class="line">  pinMode(PIN_SW, INPUT);</div>
+<div class="line">  pinMode(HW_PIN_PULSE_A, INPUT);</div>
+<div class="line">  pinMode(HW_PIN_PULSE_B, INPUT);</div>
+<div class="line">  pinMode(HW_PIN_SW, INPUT);</div>
 <div class="line"> </div>
 <div class="line">  setEncTable();</div>
+<div class="line"> </div>
+<div class="line">  DebugGPIODirectOut(DDRC, 5); // debug A5 PC5</div>
+<div class="line">  DebugGPIOLow(PORTC, 5);      // debug A5 PC5</div>
+<div class="line">  DebugGPIODirectOut(DDRC, 4); // debug A4 PC4</div>
+<div class="line">  DebugGPIOLow(PORTC, 4);      // debug A4 PC4</div>
+<div class="line"> </div>
+<div class="line">  startTimer4Interrupt();</div>
 <div class="line">}</div>
 <div class="line"> </div>
 <div class="line">void loop() {</div>
-<div class="line">  static signed int    delta        = 0;</div>
-<div class="line">  static bool          wrapEnabled  = (bool)DEFAULT_WRAP;</div>
-<div class="line">  static unsigned long prevMills    = 0;</div>
-<div class="line">  unsigned long        curMills     = millis();</div>
-<div class="line">  uint8_t              encVal       = 0;</div>
-<div class="line">  signed int           instantDelta = 0;</div>
-<div class="line"> </div>
-<div class="line">  encVal       = getEncVal();</div>
-<div class="line">  instantDelta = processEncVal(encVal);</div>
-<div class="line">  delta += adjustDelta(instantDelta);</div>
+<div class="line">  static unsigned long prevMills = 0;</div>
+<div class="line">  const unsigned long  curMills  = millis();</div>
 <div class="line"> </div>
 <div class="line">  // Dont care about millis overflows https://garretlab.web.fc2.com/arduino/lab/millis/</div>
 <div class="line">  if (curMills - prevMills &gt; CNT_FIX_INTERVAL_MS) {</div>
 <div class="line">    prevMills = curMills;</div>
 <div class="line"> </div>
-<div class="line">    bool resetOn = readFromCore(wrapEnabled);</div>
-<div class="line">    sendToCore(delta, resetOn, wrapEnabled);</div>
-<div class="line">    delta = 0;</div>
+<div class="line">    const bool resetOn = readFromCore();</div>
+<div class="line"> </div>
+<div class="line">    cli();</div>
+<div class="line">    if (resetOn) {</div>
+<div class="line">      countVal = INITIAL_VAL;</div>
+<div class="line">    }</div>
+<div class="line">    const signed int curVal = countVal;</div>
+<div class="line">    sei();</div>
+<div class="line"> </div>
+<div class="line">    sendToCore(curVal, resetOn, wrapEnabled);</div>
 <div class="line">  }</div>
 <div class="line">}</div>
 </div><!-- fragment --> </div><!-- contents -->

@@ -1,17 +1,19 @@
 #define MIN_LIBRARY_VER_BUILD_NO (0x0012)
 #include <VivicoreSerial.h>
 
-#define ANGLE_RANGE   (180)
-#define CYCLE_HZ      (50)
-#define PULSE_MIN_US  (900)  // the shortest pulse sent to a servo (544 is defined as MIN_PULSE_WIDTH on Servo.h)
-#define PULSE_MAX_US  (2100) // the longest pulse sent to a servo (2400 is defined as MAX_PULSE_WIDTH on Servo.h)
-#define MAX_CNT       (F_CPU / 8 / CYCLE_HZ) // fclk 8MHz, prescaler 8, freq of servo 50Hz
-#define US_PER_CNT    (1000000 / CYCLE_HZ / MAX_CNT)
-#define CNT_PER_ANGLE ((PULSE_MAX_US - PULSE_MIN_US) / US_PER_CNT / ANGLE_RANGE)
-#define ANGLE_MIN_CNT (PULSE_MIN_US / US_PER_CNT) // equivalent 0 degree
-#define ANGLE_MAX_CNT (PULSE_MAX_US / US_PER_CNT) // equivalent 180 degrees
-#define DEFAULT_CNT   ((ANGLE_MAX_CNT + ANGLE_MIN_CNT) / 2)
-#define CHANNELS      (2)
+#define ANGLE_RANGE     (180)
+#define CYCLE_HZ        (50)
+#define PULSE_MIN_US    (900)  // the shortest pulse sent to a servo (544 is defined as MIN_PULSE_WIDTH on Servo.h)
+#define PULSE_MAX_US    (2100) // the longest pulse sent to a servo (2400 is defined as MAX_PULSE_WIDTH on Servo.h)
+#define MAX_CNT         (F_CPU / 8 / CYCLE_HZ) // fclk 8MHz, prescaler 8, freq of servo 50Hz
+#define US_PER_CNT      (1000000 / CYCLE_HZ / MAX_CNT)
+#define CNT_PER_ANGLE   ((PULSE_MAX_US - PULSE_MIN_US) / US_PER_CNT / ANGLE_RANGE)
+#define ANGLE_MIN_CNT   (PULSE_MIN_US / US_PER_CNT) // equivalent 0 degree
+#define ANGLE_MAX_CNT   (PULSE_MAX_US / US_PER_CNT) // equivalent 180 degrees
+#define DEFAULT_CNT     ((ANGLE_MAX_CNT + ANGLE_MIN_CNT) / 2)
+#define DEFAULT_EN      (false)
+#define CHANNELS        (2)
+#define INVALID_CHANNEL (CHANNELS)
 
 #define SERVO1_ANGLE_PIN         (10)
 #define SERVO2_ANGLE_PIN         (9)
@@ -31,6 +33,14 @@
 #define DURATION_DETECT_EMPTY_MS         (1000)
 #define DURATION_DETECT_REPLACING_MS     (1000)
 #define DURATION_KEEP_LOW_INDICATION_MS  (15000) // Alert battery low to Core if the state is kept in this duration
+
+enum dcInfoNumber_t {
+  nServo1Enabled = 1,
+  nServo1Angle,
+  nServo2Enabled,
+  nServo2Angle,
+  nBatteryLow,
+};
 
 enum BatteryState_t {
   BAT_STAT_NORMAL = 0,                   // 0
@@ -115,18 +125,22 @@ private:
   CounterBuffer buf       = {};
 };
 
-const uint8_t  USER_FW_MAJOR_VER = 0x00;
-const uint8_t  USER_FW_MINOR_VER = 0x0D;
+const uint8_t  USER_FW_MAJOR_VER = 0x01;
+const uint8_t  USER_FW_MINOR_VER = 0x01;
 const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
 const uint32_t BRANCH_TYPE       = 0x00000001; // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max, data_ini}
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true,
+   DEFAULT_EN}, // 1: S1 Enabled
   {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, ANGLE_MIN_CNT, ANGLE_MAX_CNT,
-   DEFAULT_CNT}, // 1: S1 Angle
+   DEFAULT_CNT}, // 2: S1 Angle
+  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true,
+   DEFAULT_EN}, // 3: S2 Enabled
   {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, ANGLE_MIN_CNT, ANGLE_MAX_CNT,
-   DEFAULT_CNT},                                                                                // 2: S2 Angle
-  {DcGroup_t::DC_GROUP_FOR_SYSTEM, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1}, // 3: Is Battery Low
+   DEFAULT_CNT},                                                                                // 4: S2 Angle
+  {DcGroup_t::DC_GROUP_FOR_SYSTEM, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1}, // 5: Is Battery Low
 };
 
 const uint8_t angle_pins[CHANNELS] = {
@@ -137,6 +151,21 @@ const uint8_t angle_pins[CHANNELS] = {
 static bool              isBatteryLow = false;
 static BatteryLowCounter intImpCounter(COUNTERS_FOR_EMPTY_BY_INT_IMP, "internalImpedance");
 static BatteryLowCounter overloadCounter(COUNTERS_FOR_EMPTY_BY_OVERLOAD, "overload");
+
+static inline uint8_t mapDcNumberToChannel(const uint8_t dc_n) {
+  if (nServo1Enabled <= dc_n && dc_n <= nServo1Angle) {
+    return 0;
+  } else if (nServo2Enabled <= dc_n && dc_n <= nServo2Angle) {
+    return 1;
+  }
+
+  return INVALID_CHANNEL;
+}
+
+static inline void relaxTorque(const int pin) {
+  // Do not apply torque
+  digitalWrite(pin, LOW);
+}
 
 static inline void analogWriteWithProtection(const int pin, const uint16_t value) {
   // Avoid case to break servo if the value exceeds angle limit
@@ -335,10 +364,10 @@ static inline void detectLowBattery(const unsigned long curMills) {
   DebugPlainPrintln2(next);
 
   if (next == BAT_STAT_RECOVERED) {
-    Vivicore.write(3, false); // 3: Is Battery Low
+    Vivicore.write(nBatteryLow, false);
     DebugPlainPrintln0("Send battery normal");
   } else if (next == BAT_STAT_TRIGGERED_EMPTY) {
-    Vivicore.write(3, true); // 3: Is Battery Low
+    Vivicore.write(nBatteryLow, true);
     DebugPlainPrintln0("Low and send battery empty");
   } else if (next == BAT_STAT_TRIGGERED_INTERNAL_IMPEDANCE) {
     DebugPlainPrintln0("!");
@@ -353,9 +382,13 @@ static inline void detectLowBattery(const unsigned long curMills) {
 }
 
 static inline void driveServo(const unsigned long curMills) {
-  static uint16_t      prev_angles[CHANNELS] = {}; // Initialize as count 0 to apply the first received data from app
   AvailableNum_t       cnt                   = {};
   static unsigned long prevMills             = 0;
+  static uint16_t      cur_angles[CHANNELS]  = {}; // Initialize as count 0 to apply the first received data from app
+  static bool          cur_enabled[CHANNELS] = {
+    DEFAULT_EN,
+    DEFAULT_EN,
+  };
 
   if (curMills - prevMills < INTERVAL_MS) {
     return;
@@ -365,22 +398,57 @@ static inline void driveServo(const unsigned long curMills) {
   cnt = Vivicore.available();
   for (uint8_t i = 0; i < cnt.scaler; i++) {
     const ScalerData_t scaler = Vivicore.read();
-    const uint16_t     angle  = static_cast<uint16_t>(scaler.data);
-
-    if (scaler.success && (0 < scaler.dc_n) && (scaler.dc_n <= CHANNELS)) {
-      const uint8_t ch = scaler.dc_n - 1;
-      if (angle != prev_angles[ch]) {
-        prev_angles[ch] = angle;
-        analogWriteWithProtection(angle_pins[ch], angle);
-      }
-    }
 
     DebugPlainPrint0("success:");
     DebugPlainPrint0(scaler.success);
-    DebugPlainPrint0(", angle");
-    DebugPlainPrint0(scaler.dc_n);
-    DebugPlainPrint0(":");
-    DebugPlainPrintln0(angle);
+
+    if (scaler.success) {
+      const uint8_t ch = mapDcNumberToChannel(scaler.dc_n);
+
+      if (ch < CHANNELS) {
+        uint16_t angle   = cur_angles[ch];
+        bool     enabled = cur_enabled[ch];
+
+        switch (scaler.dc_n) {
+        case nServo1Enabled:
+        case nServo2Enabled:
+          enabled = static_cast<bool>(scaler.data);
+          break;
+        case nServo1Angle:
+        case nServo2Angle:
+          angle = static_cast<int16_t>(scaler.data);
+          break;
+        default:
+          break;
+        }
+
+        if (enabled != cur_enabled[ch]) {
+          if (enabled) {
+            analogWriteWithProtection(angle_pins[ch], angle);
+          } else {
+            relaxTorque(angle_pins[ch]);
+          }
+          cur_enabled[ch] = enabled;
+        }
+
+        if (angle != cur_angles[ch]) {
+          if (enabled) {
+            analogWriteWithProtection(angle_pins[ch], angle);
+          }
+          cur_angles[ch] = angle;
+        }
+
+        DebugPlainPrint0(", angle");
+        DebugPlainPrint0(scaler.dc_n);
+        DebugPlainPrint0(":");
+        DebugPlainPrint0(angle);
+      } else {
+        DebugPlainPrint0(", invalid channel:");
+        DebugPlainPrint0(ch);
+      }
+    }
+
+    DebugPlainPrintln0("");
   }
 }
 
@@ -405,7 +473,7 @@ void setup() {
 
   for (int ch = 0; ch < CHANNELS; ch++) {
     // Do not apply torque to avoid moving to DEFAULT_CNT at the time of app's initializing hardware module
-    digitalWrite(angle_pins[ch], LOW);
+    relaxTorque(angle_pins[ch]);
   }
 }
 

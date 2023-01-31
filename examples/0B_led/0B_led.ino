@@ -6,6 +6,7 @@
 #define MAX_LIGHT_8BIT  (0xFF)
 #define MAX_LIGHT_16BIT (F_CPU / LED_HZ)
 #define DEFAULT_LIGHT   (0)
+#define DEFAULT_EN      (false)
 #if defined(BOARD_REV) && (BOARD_REV >= BOARD_REV_FP1_DVT)
 #  define MAX_LIGHT_R (6234)           // For 5500K white
 #  define MAX_LIGHT_G (6909)           // For 5500K white
@@ -29,19 +30,27 @@
 #define N_RGB     (3)
 #define EXP_GAMMA ((float)2.2)
 
-const uint8_t  USER_FW_MAJOR_VER = 0x00;
-const uint8_t  USER_FW_MINOR_VER = 0x12;
+enum dcInfoNumber_t {
+  nEnabled = 1,
+  nRed,
+  nGreen,
+  nBlue,
+};
+
+const uint8_t  USER_FW_MAJOR_VER = 0x01;
+const uint8_t  USER_FW_MINOR_VER = 0x02;
 const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
 const uint32_t BRANCH_TYPE       = 0x0000000B; // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max}
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true, DEFAULT_EN}, // 1: Enabled
   {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_R,
-   DEFAULT_LIGHT}, // 1: Red
+   DEFAULT_LIGHT}, // 2: Red
   {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_G,
-   DEFAULT_LIGHT}, // 2: Green
+   DEFAULT_LIGHT}, // 3: Green
   {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_B,
-   DEFAULT_LIGHT}, // 3: Blue
+   DEFAULT_LIGHT}, // 4: Blue
 };
 
 static const int pins[N_RGB] = {
@@ -55,6 +64,8 @@ static uint16_t lights[N_RGB] = {
   DEFAULT_LIGHT,
   DEFAULT_LIGHT,
 };
+
+static bool enabled = DEFAULT_EN;
 
 static inline void analogWrite_(const int pin, const uint16_t value) {
   const uint16_t max_value =
@@ -105,9 +116,11 @@ static inline void correctGamma(const uint16_t *rgb_in, uint16_t *rgb_out) {
   }
 }
 
-static inline void analogWriteGamma(const uint16_t *rgb_in) {
+static inline void analogWriteGamma(const uint16_t *rgb_in, const bool enabled_) {
   uint16_t rgb_out[N_RGB] = {};
-  correctGamma(rgb_in, rgb_out);
+  if (enabled_) {
+    correctGamma(rgb_in, rgb_out);
+  }
   for (uint8_t i = 0; i < N_RGB; i++) {
     analogWrite_(pins[i], rgb_out[i]);
   }
@@ -135,7 +148,7 @@ void setup() {
   TCCR2A = bit(COM2B1) | bit(WGM21) | bit(WGM20); // no inverting, OC2B only connected, fast PWM, TOP=0xFF
   TCCR2B = bit(CS21); // clk/8 prescaling for about 4kHz higher frequency than another 16bit timers
 
-  analogWriteGamma(lights);
+  analogWriteGamma(lights, enabled);
 }
 
 void loop() {
@@ -145,19 +158,34 @@ void loop() {
 
   for (uint8_t i = 0; i < cnt.scaler; i++) {
     const ScalerData_t scaler = Vivicore.read();
-    if (scaler.success && (0 < scaler.dc_n) && (scaler.dc_n <= N_RGB)) {
-      const uint8_t rgb = scaler.dc_n - 1;
-      lights[rgb]       = static_cast<uint16_t>(scaler.data);
+    if (scaler.success) {
+      switch (scaler.dc_n) {
+      case nEnabled:
+        enabled = static_cast<bool>(scaler.data);
+        break;
+      case nRed:
+        lights[0] = static_cast<uint16_t>(scaler.data);
+        break;
+      case nGreen:
+        lights[1] = static_cast<uint16_t>(scaler.data);
+        break;
+      case nBlue:
+        lights[2] = static_cast<uint16_t>(scaler.data);
+        break;
+      default:
+        break;
+      }
+
+      DebugPlainPrint0("dc_n:");
+      DebugPlainPrint0(scaler.dc_n);
+      DebugPlainPrint0(", success:");
+      DebugPlainPrint0(scaler.success);
+      DebugPlainPrint0(", data:");
+      DebugPlainPrintln0(scaler.data);
     }
-    DebugPlainPrint0("dc_n:");
-    DebugPlainPrint0(scaler.dc_n);
-    DebugPlainPrint0(", success:");
-    DebugPlainPrint0(scaler.success);
-    DebugPlainPrint0(", data:");
-    DebugPlainPrintln0(scaler.data);
   }
 
   if (cnt.scaler > 0) {
-    analogWriteGamma(lights);
+    analogWriteGamma(lights, enabled);
   }
 }

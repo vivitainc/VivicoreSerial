@@ -11,24 +11,46 @@
 #define LOOP_INTERVAL        (10)   // Unit: ms.
 #define DURATION_BATTERY_LOW (1000) // Unit: ms. Alert battery low to Core if the state is kept in this duration
 
-#define MOTOR_HZ      (8000)
-#define MAX_DUTY_CNT  (F_CPU / MOTOR_HZ) // 1000
-#define MAX_SPEED     (8000)             // Keep min/max spec same as version 0x0011
-#define DEFAULT_SPEED (0)
-#define CHANNELS      (2)
+#define MOTOR_HZ        (8000)
+#define MAX_DUTY_CNT    (F_CPU / MOTOR_HZ) // 1000
+#define MAX_SPEED       (8000)             // Keep min/max spec same as version 0x0011
+#define DEFAULT_SPEED   (0)
+#define DEFAULT_EN      (false)
+#define DEFAULT_REVERSE (false) // Counter-clockwise
+#define CHANNELS        (2)
+#define INVALID_CHANNEL (CHANNELS)
 
-const uint8_t  USER_FW_MAJOR_VER = 0x00;
-const uint8_t  USER_FW_MINOR_VER = 0x13;
+enum dcInfoNumber_t {
+  nMotor1Enabled = 1,
+  nMotor1Reverse,
+  nMotor1Speed,
+  nMotor2Enabled,
+  nMotor2Reverse,
+  nMotor2Speed,
+  nBatteryLow,
+};
+
+const uint8_t  USER_FW_MAJOR_VER = 0x01;
+const uint8_t  USER_FW_MINOR_VER = 0x01;
 const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
 const uint32_t BRANCH_TYPE       = 0x00000002; // Branch index number on vivitainc/ViviParts.git
 
-const dcInfo_t dcInfo[] = {
+const dcInfo_t dc_info[] = {
   // {group_no, data_nature, data_type, data_min, data_max}
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true,
+   DEFAULT_EN}, // 1: Motor1 ON/OFF
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true,
+   DEFAULT_REVERSE}, // 2: Motor1 Reverse
   {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, -1 * MAX_SPEED, MAX_SPEED,
-   DEFAULT_SPEED}, // 1: Motor1 Control
+   DEFAULT_SPEED}, // 3: Motor1 Speed
+  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true,
+   DEFAULT_EN}, // 4: Motor2 ON/OFF
+  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true,
+   DEFAULT_REVERSE}, // 5: Motor2 Reverse
   {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, -1 * MAX_SPEED, MAX_SPEED,
-   DEFAULT_SPEED},                                                                              // 2: Motor2 Control
-  {DcGroup_t::DC_GROUP_FOR_SYSTEM, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1}, // 3: Is Battery Low
+   DEFAULT_SPEED}, // 6: Motor2 Speed
+  {DcGroup_t::DC_GROUP_FOR_SYSTEM, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, false,
+   true}, // 7: Is Battery Low
 };
 
 const uint8_t dir_pins[CHANNELS] = {
@@ -39,6 +61,16 @@ const uint8_t speed_pins[CHANNELS] = {
   MOTOR1_SPEED_PIN,
   MOTOR2_SPEED_PIN,
 };
+
+static inline uint8_t mapDcNumberToChannel(const uint8_t dc_n) {
+  if (nMotor1Enabled <= dc_n && dc_n <= nMotor1Speed) {
+    return 0;
+  } else if (nMotor2Enabled <= dc_n && dc_n <= nMotor2Speed) {
+    return 1;
+  }
+
+  return INVALID_CHANNEL;
+}
 
 static inline void analogWrite_(const uint8_t pin, const uint16_t value) {
   const uint16_t mappedValue = map(value, 0, MAX_SPEED, 0, MAX_DUTY_CNT);
@@ -89,7 +121,7 @@ static inline void detectLowBattery(void) {
 
     if (shouldNotify) {
       prevBatteryLow = isBatteryLow;
-      Vivicore.write(3, isBatteryLow); // 3: Is Battery Low
+      Vivicore.write(nBatteryLow, isBatteryLow);
     }
 
     Vivicore.flush();
@@ -102,7 +134,7 @@ static inline void detectLowBattery(void) {
 }
 
 void setup() {
-  Vivicore.begin(BRANCH_TYPE, USER_FW_VER, dcInfo, countof(dcInfo), MIN_LIBRARY_VER_BUILD_NO);
+  Vivicore.begin(BRANCH_TYPE, USER_FW_VER, dc_info, countof(dc_info), MIN_LIBRARY_VER_BUILD_NO);
 
   digitalWrite(BATTERY_ALERT_RESET_PIN, HIGH);
   pinMode(BATTERY_ALERT_RESET_PIN, OUTPUT);
@@ -126,14 +158,26 @@ void setup() {
 
   for (uint8_t ch = 0; ch < CHANNELS; ch++) {
     setDirection(dir_pins[ch], DEFAULT_SPEED);
-    analogWrite_(speed_pins[ch], DEFAULT_SPEED);
+    analogWrite_(speed_pins[ch], (uint16_t)abs(DEFAULT_SPEED));
   }
 }
 
 void loop() {
-  static int16_t prev_speeds[CHANNELS] = {
+  static int16_t cur_velocity[CHANNELS] = {
     DEFAULT_SPEED,
     DEFAULT_SPEED,
+  };
+  static int16_t cur_speeds[CHANNELS] = {
+    DEFAULT_SPEED,
+    DEFAULT_SPEED,
+  };
+  static bool cur_enabled[CHANNELS] = {
+    DEFAULT_EN,
+    DEFAULT_EN,
+  };
+  static bool cur_reverse[CHANNELS] = {
+    DEFAULT_REVERSE,
+    DEFAULT_REVERSE,
   };
   const AvailableNum_t cnt = Vivicore.available();
 
@@ -143,22 +187,48 @@ void loop() {
 
   for (uint8_t i = 0; i < cnt.scaler; i++) {
     const ScalerData_t scaler = Vivicore.read();
-    const int16_t      speed  = static_cast<int16_t>(scaler.data);
-
-    if (scaler.success && (0 < scaler.dc_n) && (scaler.dc_n <= CHANNELS)) {
-      const uint8_t ch = scaler.dc_n - 1;
-      if (speed != prev_speeds[ch]) {
-        prev_speeds[ch] = speed;
-        setDirection(dir_pins[ch], speed);
-        analogWrite_(speed_pins[ch], (uint16_t)abs(speed));
-      }
-    }
 
     DebugPlainPrint0("success:");
     DebugPlainPrint0(scaler.success);
-    DebugPlainPrint0(", speed");
-    DebugPlainPrint0(scaler.dc_n);
-    DebugPlainPrint0(":");
-    DebugPlainPrintln0(speed);
+
+    if (scaler.success) {
+      const uint8_t ch = mapDcNumberToChannel(scaler.dc_n);
+
+      if (ch < CHANNELS) {
+        switch (scaler.dc_n) {
+        case nMotor1Enabled:
+        case nMotor2Enabled:
+          cur_enabled[ch] = static_cast<bool>(scaler.data);
+          break;
+        case nMotor1Reverse:
+        case nMotor2Reverse:
+          cur_reverse[ch] = static_cast<bool>(scaler.data);
+          break;
+        case nMotor1Speed:
+        case nMotor2Speed:
+          cur_speeds[ch] = static_cast<int16_t>(scaler.data);
+          break;
+        default:
+          break;
+        }
+
+        const int16_t velocity = (cur_enabled[ch] ? cur_speeds[ch] : 0) * (cur_reverse[ch] ? -1 : 1);
+        if (velocity != cur_velocity[ch]) {
+          cur_velocity[ch] = velocity;
+          setDirection(dir_pins[ch], velocity);
+          analogWrite_(speed_pins[ch], (uint16_t)abs(velocity));
+        }
+
+        DebugPlainPrint0(", speed");
+        DebugPlainPrint0(scaler.dc_n);
+        DebugPlainPrint0(":");
+        DebugPlainPrint0(velocity);
+      } else {
+        DebugPlainPrint0(", invalid channel:");
+        DebugPlainPrint0(ch);
+      }
+    }
+
+    DebugPlainPrintln0("");
   }
 }

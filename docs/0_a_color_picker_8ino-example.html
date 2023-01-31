@@ -68,7 +68,9 @@ $(function() {
 <div class="fragment"><div class="line">#define MIN_LIBRARY_VER_BUILD_NO (0x0012)</div>
 <div class="line">#include &lt;VivicoreSerial.h&gt;</div>
 <div class="line">#include &lt;Adafruit_APDS9960.h&gt;</div>
+<div class="line">#include &lt;math.h&gt;</div>
 <div class="line"> </div>
+<div class="line">#define MAX_RGB       (255)</div>
 <div class="line">#define MAX_HUE       (359)</div>
 <div class="line">#define MAX_SAT       (255)</div>
 <div class="line">#define MAX_VAL       (255)</div>
@@ -77,6 +79,8 @@ $(function() {
 <div class="line">#define DEFAULT_LIGHT (MAX_LIGHT * 3 / 10)</div>
 <div class="line">#define VCC_HZ        (32 * 1000)</div>
 <div class="line">#define COLORS        (8 + 2) // Color number + origin + end point</div>
+<div class="line"> </div>
+<div class="line">#define PROXIMITY_THRESHOLD (255)</div>
 <div class="line"> </div>
 <div class="line">#define VCC_PIN (9)</div>
 <div class="line">#define LED_PIN (3)</div>
@@ -93,25 +97,27 @@ $(function() {
 <div class="line">  HSV_V,</div>
 <div class="line">  HSV_NUM,</div>
 <div class="line">};</div>
-<div class="line">enum {</div>
-<div class="line">  DC_HUE = 1,</div>
-<div class="line">  DC_SATURATION,</div>
-<div class="line">  DC_VALUE,</div>
-<div class="line">  DC_LED,</div>
+<div class="line">enum dcInfoNumber_t {</div>
+<div class="line">  nRed = 1,</div>
+<div class="line">  nGreen,</div>
+<div class="line">  nBlue,</div>
+<div class="line">  nProximity,</div>
+<div class="line">  nLed,</div>
 <div class="line">};</div>
 <div class="line"> </div>
-<div class="line">const uint8_t  USER_FW_MAJOR_VER = 0x00;</div>
-<div class="line">const uint8_t  USER_FW_MINOR_VER = 0x12;</div>
+<div class="line">const uint8_t  USER_FW_MAJOR_VER = 0x01;</div>
+<div class="line">const uint8_t  USER_FW_MINOR_VER = 0x01;</div>
 <div class="line">const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) &lt;&lt; 8) + ((uint16_t)(USER_FW_MINOR_VER)));</div>
 <div class="line">const uint32_t BRANCH_TYPE       = 0x0000000A; // Branch index number on vivitainc/ViviParts.git</div>
 <div class="line"> </div>
 <div class="line">const dcInfo_t dcInfo[] = {</div>
 <div class="line">  // {group_no, data_nature, data_type, data_min, data_max, data_ini}</div>
-<div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_HUE}, // 1: Hue</div>
-<div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_SAT}, // 2: Saturation</div>
-<div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_VAL}, // 3: Value</div>
+<div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_RGB}, // 1: Red</div>
+<div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_RGB}, // 2: Green</div>
+<div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_RGB}, // 3: Blue</div>
+<div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, false, true},      // 4: Proximity</div>
 <div class="line">  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT,</div>
-<div class="line">   DEFAULT_LIGHT}, // 4: Light LED</div>
+<div class="line">   DEFAULT_LIGHT}, // 5: Light LED</div>
 <div class="line">};</div>
 <div class="line"> </div>
 <div class="line">// Color conversion table written on this esa.</div>
@@ -234,12 +240,70 @@ $(function() {
 <div class="line">  hsv[HSV_H] = (uint16_t)hue;</div>
 <div class="line">}</div>
 <div class="line"> </div>
+<div class="line">static inline void convertRgb(const uint16_t *hsv, uint8_t *rgb) {</div>
+<div class="line">  const float   h      = static_cast&lt;float&gt;(hsv[0]);</div>
+<div class="line">  const float   s      = constrain(static_cast&lt;float&gt;(hsv[1]) / static_cast&lt;float&gt;(MAX_SAT), 0.0, 1.0);</div>
+<div class="line">  const float   v      = constrain(static_cast&lt;float&gt;(hsv[2]) / static_cast&lt;float&gt;(MAX_VAL), 0.0, 1.0);</div>
+<div class="line">  const uint8_t v_byte = static_cast&lt;uint8_t&gt;(hsv[2]);</div>
+<div class="line"> </div>
+<div class="line">  if (abs(s) &lt;= (1.0 / static_cast&lt;float&gt;(1 &lt;&lt; 12))) { // shade of gray</div>
+<div class="line">    memset(rgb, v_byte, 3);</div>
+<div class="line">    return;</div>
+<div class="line">  }</div>
+<div class="line"> </div>
+<div class="line">  const float hx = (hsv[0] &gt;= 360) ? 0.0 : h / 60.0;</div>
+<div class="line">  const float w  = floor(hx);</div>
+<div class="line">  const float f  = hx - w;</div>
+<div class="line"> </div>
+<div class="line">  const uint8_t p = static_cast&lt;uint8_t&gt;(round((1.0 - s) * v * 255.0));</div>
+<div class="line">  const uint8_t q = static_cast&lt;uint8_t&gt;(round((1.0 - (s * f)) * v * 255.0));</div>
+<div class="line">  const uint8_t t = static_cast&lt;uint8_t&gt;(round((1.0 - (s * (1.0 - f))) * v * 255.0));</div>
+<div class="line">  uint8_t       r, g, b;</div>
+<div class="line"> </div>
+<div class="line">  switch (static_cast&lt;uint8_t&gt;(w)) {</div>
+<div class="line">  case 0:</div>
+<div class="line">    r = v_byte;</div>
+<div class="line">    g = t;</div>
+<div class="line">    b = p;</div>
+<div class="line">    break;</div>
+<div class="line">  case 1:</div>
+<div class="line">    r = q;</div>
+<div class="line">    g = v_byte;</div>
+<div class="line">    b = p;</div>
+<div class="line">    break;</div>
+<div class="line">  case 2:</div>
+<div class="line">    r = p;</div>
+<div class="line">    g = v_byte;</div>
+<div class="line">    b = t;</div>
+<div class="line">    break;</div>
+<div class="line">  case 3:</div>
+<div class="line">    r = p;</div>
+<div class="line">    g = q;</div>
+<div class="line">    b = v_byte;</div>
+<div class="line">    break;</div>
+<div class="line">  case 4:</div>
+<div class="line">    r = t;</div>
+<div class="line">    g = p;</div>
+<div class="line">    b = v_byte;</div>
+<div class="line">    break;</div>
+<div class="line">  default:</div>
+<div class="line">    r = v_byte;</div>
+<div class="line">    g = p;</div>
+<div class="line">    b = q;</div>
+<div class="line">    break;</div>
+<div class="line">  }</div>
+<div class="line"> </div>
+<div class="line">  rgb[RGB_R] = r;</div>
+<div class="line">  rgb[RGB_G] = g;</div>
+<div class="line">  rgb[RGB_B] = b;</div>
+<div class="line">}</div>
+<div class="line"> </div>
 <div class="line">static inline void controlLed(void) {</div>
 <div class="line">  const AvailableNum_t cnt = Vivicore.available();</div>
 <div class="line"> </div>
 <div class="line">  for (uint8_t i = 0; i &lt; cnt.scaler; i++) {</div>
 <div class="line">    const ScalerData_t scaler = Vivicore.read();</div>
-<div class="line">    if (scaler.success &amp;&amp; (scaler.dc_n == DC_LED)) {</div>
+<div class="line">    if (scaler.success &amp;&amp; (scaler.dc_n == nLed)) {</div>
 <div class="line">      analogWriteToLed(static_cast&lt;uint16_t&gt;(scaler.data));</div>
 <div class="line">    }</div>
 <div class="line">    DebugPlainPrint0(&quot;dc_n:&quot;);</div>
@@ -259,6 +323,7 @@ $(function() {
 <div class="line">    // arg type is uint16_t and calclate ATIME reg value like below internally</div>
 <div class="line">    // ATIME reg: 256 - (iTimeMS / 2.78)</div>
 <div class="line">    apds9960.setADCIntegrationTime(28);</div>
+<div class="line">    apds9960.enableProximity(true);</div>
 <div class="line">  } else {</div>
 <div class="line">    DebugPlainPrintln0(&quot;Error: initialization&quot;);</div>
 <div class="line">  }</div>
@@ -277,42 +342,60 @@ $(function() {
 <div class="line">}</div>
 <div class="line"> </div>
 <div class="line">void loop() {</div>
-<div class="line">  static uint16_t hsv_prev[HSV_NUM] = {};</div>
+<div class="line">  static bool     on_target_prev    = false;</div>
+<div class="line">  static uint16_t rgb_prev[HSV_NUM] = {};</div>
 <div class="line">  uint16_t        hue               = 0;</div>
 <div class="line">  uint16_t        hsv[HSV_NUM]      = {};</div>
-<div class="line">  uint16_t        rgb[RGB_NUM]      = {};</div>
+<div class="line">  uint16_t        rgb_raw[RGB_NUM]  = {};</div>
+<div class="line">  uint8_t         rgb[RGB_NUM]      = {};</div>
 <div class="line">  uint16_t        c                 = 0;</div>
 <div class="line"> </div>
 <div class="line">  delay(30);</div>
 <div class="line">  controlLed();</div>
 <div class="line"> </div>
+<div class="line">  const uint8_t proximity = apds9960.readProximity();</div>
+<div class="line">  const bool    on_target = (proximity &gt;= PROXIMITY_THRESHOLD);</div>
+<div class="line">  if (on_target != on_target_prev) {</div>
+<div class="line">    on_target_prev = on_target;</div>
+<div class="line">    Vivicore.write(nProximity, on_target);</div>
+<div class="line">  }</div>
+<div class="line"> </div>
 <div class="line">  while (!apds9960.colorDataReady()) {</div>
 <div class="line">    delay(5);</div>
 <div class="line">  }</div>
-<div class="line">  apds9960.getColorData(&amp;rgb[RGB_R], &amp;rgb[RGB_G], &amp;rgb[RGB_B], &amp;c);</div>
+<div class="line">  apds9960.getColorData(&amp;rgb_raw[RGB_R], &amp;rgb_raw[RGB_G], &amp;rgb_raw[RGB_B], &amp;c);</div>
 <div class="line"> </div>
-<div class="line">  convertHsv(rgb, hsv);</div>
+<div class="line">  convertHsv(rgb_raw, hsv);</div>
 <div class="line">  hue        = hsv[HSV_H];</div>
 <div class="line">  hsv[HSV_H] = convertRoundedHue(hue);</div>
+<div class="line">  convertRgb(hsv, rgb);</div>
 <div class="line"> </div>
-<div class="line">  for (uint8_t i = 0; i &lt; HSV_NUM; i++) {</div>
-<div class="line">    if (hsv_prev[i] != hsv[i]) {</div>
-<div class="line">      const uint8_t dc_num = i + 1;</div>
-<div class="line">      hsv_prev[i]          = hsv[i];</div>
-<div class="line">      Vivicore.write(dc_num, hsv[i]);</div>
+<div class="line">  for (uint8_t i = 0; i &lt; RGB_NUM; i++) {</div>
+<div class="line">    if (rgb_prev[i] != rgb[i]) {</div>
+<div class="line">      rgb_prev[i] = rgb[i];</div>
+<div class="line">      switch (i) {</div>
+<div class="line">      case RGB_R:</div>
+<div class="line">        Vivicore.write(nRed, rgb[i]);</div>
+<div class="line">        break;</div>
+<div class="line">      case RGB_G:</div>
+<div class="line">        Vivicore.write(nGreen, rgb[i]);</div>
+<div class="line">        break;</div>
+<div class="line">      case RGB_B:</div>
+<div class="line">        Vivicore.write(nBlue, rgb[i]);</div>
+<div class="line">        break;</div>
+<div class="line">      default:</div>
+<div class="line">        break;</div>
+<div class="line">      }</div>
 <div class="line">    }</div>
 <div class="line">  }</div>
 <div class="line"> </div>
 <div class="line">  Vivicore.flush();</div>
 <div class="line"> </div>
 <div class="line">  DebugPlainPrint0(&quot;raw:&quot;);</div>
-<div class="line">  DebugHexPrint0(rgb[RGB_R] &gt;&gt; 8);</div>
 <div class="line">  DebugHexPrint0(rgb[RGB_R]);</div>
 <div class="line">  DebugPlainPrint0(&quot;,&quot;);</div>
-<div class="line">  DebugHexPrint0(rgb[RGB_G] &gt;&gt; 8);</div>
 <div class="line">  DebugHexPrint0(rgb[RGB_G]);</div>
 <div class="line">  DebugPlainPrint0(&quot;,&quot;);</div>
-<div class="line">  DebugHexPrint0(rgb[RGB_B] &gt;&gt; 8);</div>
 <div class="line">  DebugHexPrint0(rgb[RGB_B]);</div>
 <div class="line">  DebugPlainPrint0(&quot;,&quot;);</div>
 <div class="line">  DebugHexPrint0(c &gt;&gt; 8);</div>
@@ -334,6 +417,9 @@ $(function() {
 <div class="line">  DebugPlainPrint0(&quot;,&quot;);</div>
 <div class="line">  DebugHexPrint0(convertHue(hue) &gt;&gt; 8);</div>
 <div class="line">  DebugHexPrint0(convertHue(hue));</div>
+<div class="line">  DebugPlainPrintln0(&quot;,&quot;);</div>
+<div class="line">  DebugPlainPrint0(&quot;proximity:&quot;);</div>
+<div class="line">  DebugPlainPrint0(proximity);</div>
 <div class="line">  DebugPlainPrintln0(&quot;&quot;);</div>
 <div class="line">}</div>
 </div><!-- fragment --> </div><!-- contents -->

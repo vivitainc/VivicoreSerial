@@ -10,10 +10,11 @@ The official sketches of VIVIWARE Cell Branch are included as examples code.
 
 The below table shows the corresponding Arduino IDE version VivicoreSerial library requires. Refer to [How to setup](#how-to-setup) to install Arduino IDE and configure the board and library manager.
 
-| Arduino IDE version | VivicoreSerial version managed on Library Manager | `LIBRARY_VER_BUILD_NO` defined on `VivicoreSerialVersion.h` | Description |
-|-|-|-|-|
-| 1.8.12 (Required)   | 1.0.0 or later         | 0x0005 or later      |<ul><li>64bit compatibility with upcoming macOS Catalina</li><li>avr-gcc 7.3.0-atmel3.6.1-arduino5</li></ul>|
-| 1.8.7               | -                      | 0x0004 or before     |<ul><li>avr-gcc 5.4.0</li></ul>|
+| Arduino IDE version | Arduino AVR Boards | VivicoreSerial version managed on Library Manager | `LIBRARY_VER_BUILD_NO` defined on `VivicoreSerialVersion.h` | Description |
+|-|-|-|-|-|
+| 2.0.0 or later | 1.8.2 (Required)         | 1.0.0 or later         | 0x0005 or later      |<ul><li>64bit compatibility</li><li>Arduino AVR Boards 1.8.2</li><ul><li>avr-gcc 7.3.0-atmel3.6.1-arduino5</li></ul><li>Arduino AVR Boards 1.8.3, 1.8.4</li><ul><li>avr-gcc 7.3.0-atmel3.6.1-arduino7</li><li>Wire library with timeout function</li></ul></ul>|
+| 1.8.12 | 1.8.2 (Included in IDE)  | 1.0.0 or later         | 0x0005 or later      |<ul><li>64bit compatibility</li><li>avr-gcc 7.3.0-atmel3.6.1-arduino5</li></ul>|
+| 1.8.7  | 1.6.23 (Included in IDE) | -                      | 0x0004 or before     |<ul><li>32bit compatibility</li><li>avr-gcc 5.4.0</li></ul>|
 
 # Dependencies and lisence information
 
@@ -40,27 +41,34 @@ The following libraries cannot be found on Library Manager, and need to be insta
 
 This instruction describes how to setup Arduino IDE to build VIVIWARE Cell Custom sketch and upload it to the board.
 
-## Install and configure Arduino IDE
+## Install Arduino IDE
 
 1. Download and install the required Arduino IDE version written on [requisites](#requisites) which is available on [Arduino official site top](https://www.arduino.cc/en/Main/Software) or [Previous IDE Releases](https://www.arduino.cc/en/Main/OldSoftwareReleases#previous).
     - For Windows, **use Windows Installer exe file but not zip file**
-    - On Board Manager in Arduino IDE, **do not update built-in packages (e.g. Arduino AVR Boards)** to avoid unexpected built result mismatch. Use default build-in packages bundled with the required Arduino IDE version.
-2. Open `Preferences` of Arduino IDE.
-3. Add URL `https://raw.githubusercontent.com/vivitainc/custom_cell_boards/master/package_viviware_index.json` into `Additional Boards Manager URLs` text box, and press `OK` button.
+
+## Configure Arduino IDE
+
+1. Open `Preferences` of Arduino IDE.
+2. Add URL `https://raw.githubusercontent.com/vivitainc/custom_cell_boards/master/package_viviware_index.json` into `Additional Boards Manager URLs` text box, and press `OK` button.
 
 ## Setup Boards Manager
 
 1. Open Arduino IDE and the menu `Tools` > `Board:` > `Boards Manager...`.
-2. Select `Type` of `All` or `Contributed`, enter `viviware` into text box, and find `VIVIWARE Cell Custom Boards`.
-3. Select the latest version of `VIVIWARE Cell Custom Boards` (e.g. `1.0.1`), and press `Install` button.
-4. After a while, check the status `INSTALLED` shown on right side of the version.
-5. Close `Boards Manager` by pressing `Close` button.
+2. Enter `arduino` into text box.
+    - Find `Arduino AVR Boards`.
+    - Select the required version written on [requisites](#requisites), and press `Install` button. **Do not use another version to avoid unexpected built result mismatch.**
+    - After a while, check the status `INSTALLED` shown on right side of the version.
+2. Enter `viviware` into text box.
+    - Find `VIVIWARE Cell Custom Boards`.
+    - Select the latest version (e.g. `6.3.0`), and press `Install` button.
+    - After a while, check the status `INSTALLED` shown on right side of the version.
+3. Close `Boards Manager` by pressing `Close` button.
 
 ## Setup Library Manager
 
 1. Open Arduino IDE and the menu `Sketch` > `Include Library` > `Manage Libraries...`.
 2. Select `Type` of `All` or `Contributed`, select `Topic` of `All` or `Communication`, and enter `VivicoreSerial` into text box, and find `VivicoreSerial` library.
-3. Select the latest version of `VivicoreSerial` (e.g. `1.0.0`), and press `Install` button.
+3. Select the latest version of `VivicoreSerial` (e.g. `3.2.0+07010014`), and press `Install` button.
 4. After a while, check the status `INSTALLED` shown on right side of the version.
 5. Close `Library Manager` by pressing `Close` button.
 
@@ -78,8 +86,13 @@ This instruction describes how to setup Arduino IDE to build VIVIWARE Cell Custo
 Refer to [README](https://github.com/vivitainc/branch_cell/blob/develop/README.md) for library developer.
 
 # VivicoreSerial version history on Library Manager
+- 3.2.0 : Add features or fix issues as the following
+    - Support VIVIWARE Cell Custom v4 board with [custom_cell_board 6.3.0](https://github.com/vivitainc/custom_cell_boards/releases/tag/6.3.0) or later
+    - Support VIVIWARE Cell Custom v3 board as DeprecatedCustom
+    - Drop supporting VIVIWARE Cell Custom v2, v1 board
 - 3.1.0 : Add features or fix issues as the following
     - Support VIVIWARE Cell Custom v3 board with [custom_cell_board 6.2.0](https://github.com/vivitainc/custom_cell_boards/releases/tag/6.2.0) or later
+    - Support VIVIWARE Cell Custom v2, v1 board as DeprecatedCustom
     - Support VIVIWARE Cell UserBranch with [custom_cell_board 6.1.0](https://github.com/vivitainc/custom_cell_boards/releases/tag/6.1.0) or later
 - 3.0.0 : Add features or fix issues as the following
     - Remove setOverrideIni and use write before begin to override DC_INI

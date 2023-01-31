@@ -1,7 +1,9 @@
 #define MIN_LIBRARY_VER_BUILD_NO (0x0012)
 #include <VivicoreSerial.h>
 #include <Adafruit_APDS9960.h>
+#include <math.h>
 
+#define MAX_RGB       (255)
 #define MAX_HUE       (359)
 #define MAX_SAT       (255)
 #define MAX_VAL       (255)
@@ -10,6 +12,8 @@
 #define DEFAULT_LIGHT (MAX_LIGHT * 3 / 10)
 #define VCC_HZ        (32 * 1000)
 #define COLORS        (8 + 2) // Color number + origin + end point
+
+#define PROXIMITY_THRESHOLD (255)
 
 #define VCC_PIN (9)
 #define LED_PIN (3)
@@ -26,25 +30,27 @@ enum {
   HSV_V,
   HSV_NUM,
 };
-enum {
-  DC_HUE = 1,
-  DC_SATURATION,
-  DC_VALUE,
-  DC_LED,
+enum dcInfoNumber_t {
+  nRed = 1,
+  nGreen,
+  nBlue,
+  nProximity,
+  nLed,
 };
 
-const uint8_t  USER_FW_MAJOR_VER = 0x00;
-const uint8_t  USER_FW_MINOR_VER = 0x12;
+const uint8_t  USER_FW_MAJOR_VER = 0x01;
+const uint8_t  USER_FW_MINOR_VER = 0x01;
 const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
 const uint32_t BRANCH_TYPE       = 0x0000000A; // Branch index number on vivitainc/ViviParts.git
 
 const dcInfo_t dcInfo[] = {
   // {group_no, data_nature, data_type, data_min, data_max, data_ini}
-  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_HUE}, // 1: Hue
-  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_SAT}, // 2: Saturation
-  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_VAL}, // 3: Value
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_RGB}, // 1: Red
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_RGB}, // 2: Green
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_RGB}, // 3: Blue
+  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, false, true},      // 4: Proximity
   {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT,
-   DEFAULT_LIGHT}, // 4: Light LED
+   DEFAULT_LIGHT}, // 5: Light LED
 };
 
 // Color conversion table written on this esa.
@@ -167,12 +173,70 @@ static inline void convertHsv(const uint16_t *rgb_raw, uint16_t *hsv) {
   hsv[HSV_H] = (uint16_t)hue;
 }
 
+static inline void convertRgb(const uint16_t *hsv, uint8_t *rgb) {
+  const float   h      = static_cast<float>(hsv[0]);
+  const float   s      = constrain(static_cast<float>(hsv[1]) / static_cast<float>(MAX_SAT), 0.0, 1.0);
+  const float   v      = constrain(static_cast<float>(hsv[2]) / static_cast<float>(MAX_VAL), 0.0, 1.0);
+  const uint8_t v_byte = static_cast<uint8_t>(hsv[2]);
+
+  if (abs(s) <= (1.0 / static_cast<float>(1 << 12))) { // shade of gray
+    memset(rgb, v_byte, 3);
+    return;
+  }
+
+  const float hx = (hsv[0] >= 360) ? 0.0 : h / 60.0;
+  const float w  = floor(hx);
+  const float f  = hx - w;
+
+  const uint8_t p = static_cast<uint8_t>(round((1.0 - s) * v * 255.0));
+  const uint8_t q = static_cast<uint8_t>(round((1.0 - (s * f)) * v * 255.0));
+  const uint8_t t = static_cast<uint8_t>(round((1.0 - (s * (1.0 - f))) * v * 255.0));
+  uint8_t       r, g, b;
+
+  switch (static_cast<uint8_t>(w)) {
+  case 0:
+    r = v_byte;
+    g = t;
+    b = p;
+    break;
+  case 1:
+    r = q;
+    g = v_byte;
+    b = p;
+    break;
+  case 2:
+    r = p;
+    g = v_byte;
+    b = t;
+    break;
+  case 3:
+    r = p;
+    g = q;
+    b = v_byte;
+    break;
+  case 4:
+    r = t;
+    g = p;
+    b = v_byte;
+    break;
+  default:
+    r = v_byte;
+    g = p;
+    b = q;
+    break;
+  }
+
+  rgb[RGB_R] = r;
+  rgb[RGB_G] = g;
+  rgb[RGB_B] = b;
+}
+
 static inline void controlLed(void) {
   const AvailableNum_t cnt = Vivicore.available();
 
   for (uint8_t i = 0; i < cnt.scaler; i++) {
     const ScalerData_t scaler = Vivicore.read();
-    if (scaler.success && (scaler.dc_n == DC_LED)) {
+    if (scaler.success && (scaler.dc_n == nLed)) {
       analogWriteToLed(static_cast<uint16_t>(scaler.data));
     }
     DebugPlainPrint0("dc_n:");
@@ -192,6 +256,7 @@ void setup() {
     // arg type is uint16_t and calclate ATIME reg value like below internally
     // ATIME reg: 256 - (iTimeMS / 2.78)
     apds9960.setADCIntegrationTime(28);
+    apds9960.enableProximity(true);
   } else {
     DebugPlainPrintln0("Error: initialization");
   }
@@ -210,42 +275,60 @@ void setup() {
 }
 
 void loop() {
-  static uint16_t hsv_prev[HSV_NUM] = {};
+  static bool     on_target_prev    = false;
+  static uint16_t rgb_prev[HSV_NUM] = {};
   uint16_t        hue               = 0;
   uint16_t        hsv[HSV_NUM]      = {};
-  uint16_t        rgb[RGB_NUM]      = {};
+  uint16_t        rgb_raw[RGB_NUM]  = {};
+  uint8_t         rgb[RGB_NUM]      = {};
   uint16_t        c                 = 0;
 
   delay(30);
   controlLed();
 
+  const uint8_t proximity = apds9960.readProximity();
+  const bool    on_target = (proximity >= PROXIMITY_THRESHOLD);
+  if (on_target != on_target_prev) {
+    on_target_prev = on_target;
+    Vivicore.write(nProximity, on_target);
+  }
+
   while (!apds9960.colorDataReady()) {
     delay(5);
   }
-  apds9960.getColorData(&rgb[RGB_R], &rgb[RGB_G], &rgb[RGB_B], &c);
+  apds9960.getColorData(&rgb_raw[RGB_R], &rgb_raw[RGB_G], &rgb_raw[RGB_B], &c);
 
-  convertHsv(rgb, hsv);
+  convertHsv(rgb_raw, hsv);
   hue        = hsv[HSV_H];
   hsv[HSV_H] = convertRoundedHue(hue);
+  convertRgb(hsv, rgb);
 
-  for (uint8_t i = 0; i < HSV_NUM; i++) {
-    if (hsv_prev[i] != hsv[i]) {
-      const uint8_t dc_num = i + 1;
-      hsv_prev[i]          = hsv[i];
-      Vivicore.write(dc_num, hsv[i]);
+  for (uint8_t i = 0; i < RGB_NUM; i++) {
+    if (rgb_prev[i] != rgb[i]) {
+      rgb_prev[i] = rgb[i];
+      switch (i) {
+      case RGB_R:
+        Vivicore.write(nRed, rgb[i]);
+        break;
+      case RGB_G:
+        Vivicore.write(nGreen, rgb[i]);
+        break;
+      case RGB_B:
+        Vivicore.write(nBlue, rgb[i]);
+        break;
+      default:
+        break;
+      }
     }
   }
 
   Vivicore.flush();
 
   DebugPlainPrint0("raw:");
-  DebugHexPrint0(rgb[RGB_R] >> 8);
   DebugHexPrint0(rgb[RGB_R]);
   DebugPlainPrint0(",");
-  DebugHexPrint0(rgb[RGB_G] >> 8);
   DebugHexPrint0(rgb[RGB_G]);
   DebugPlainPrint0(",");
-  DebugHexPrint0(rgb[RGB_B] >> 8);
   DebugHexPrint0(rgb[RGB_B]);
   DebugPlainPrint0(",");
   DebugHexPrint0(c >> 8);
@@ -267,5 +350,8 @@ void loop() {
   DebugPlainPrint0(",");
   DebugHexPrint0(convertHue(hue) >> 8);
   DebugHexPrint0(convertHue(hue));
+  DebugPlainPrintln0(",");
+  DebugPlainPrint0("proximity:");
+  DebugPlainPrint0(proximity);
   DebugPlainPrintln0("");
 }

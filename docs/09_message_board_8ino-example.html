@@ -98,8 +98,8 @@ $(function() {
 <div class="line"> </div>
 <div class="line">const char *INITIAL_TEXT = &quot;&quot;;</div>
 <div class="line"> </div>
-<div class="line">const uint8_t  USER_FW_MAJOR_VER = 0x00;</div>
-<div class="line">const uint8_t  USER_FW_MINOR_VER = 0x12;</div>
+<div class="line">const uint8_t  USER_FW_MAJOR_VER = 0x01;</div>
+<div class="line">const uint8_t  USER_FW_MINOR_VER = 0x01;</div>
 <div class="line">const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) &lt;&lt; 8) + ((uint16_t)(USER_FW_MINOR_VER)));</div>
 <div class="line">const uint32_t BRANCH_TYPE       = 0x00000009;</div>
 <div class="line"> </div>
@@ -359,7 +359,8 @@ $(function() {
 <div class="line"> </div>
 <div class="line">void loop() {</div>
 <div class="line">  static uint8_t       charbuffer[DISP_BUF_SIZE] = {};</div>
-<div class="line">  static bool          is_scroll                 = 0;</div>
+<div class="line">  static bool          is_scroll                 = false;</div>
+<div class="line">  static bool          is_enabled                = true;</div>
 <div class="line">  static int           image_h_shift             = 0;</div>
 <div class="line">  static unsigned long prev_time                 = 0;</div>
 <div class="line">  const AvailableNum_t recv_cnt                  = Vivicore.available();</div>
@@ -381,7 +382,8 @@ $(function() {
 <div class="line">    }</div>
 <div class="line">    DebugPlainPrintln1();</div>
 <div class="line"> </div>
-<div class="line">    is_scroll = ((raw.data[0] &amp; 0x01) != 0);</div>
+<div class="line">    is_scroll  = ((raw.data[0] &amp; 0x01) != 0);</div>
+<div class="line">    is_enabled = ((raw.data[0] &amp; 0x02) != 0);</div>
 <div class="line">    for (uint8_t char_idx = 0; char_idx &lt; DISP_BUF_SIZE; char_idx++) {</div>
 <div class="line">      charbuffer[char_idx] = (char_idx &lt; raw.data_len) ? raw.data[char_idx + 1] : &#39; &#39;;</div>
 <div class="line">    }</div>
@@ -389,17 +391,19 @@ $(function() {
 <div class="line">    image_h_shift = 0;</div>
 <div class="line">    prev_time     = millis();</div>
 <div class="line"> </div>
-<div class="line">    convCharImage(charbuffer);</div>
+<div class="line">    convCharImage(is_enabled ? charbuffer : reinterpret_cast&lt;const uint8_t *&gt;(INITIAL_TEXT));</div>
 <div class="line">    updateScr(image_h_shift, IMAGE_V_SHIFT, true);</div>
 <div class="line">  }</div>
 <div class="line"> </div>
 <div class="line">  // Dont care about millis overflows https://garretlab.web.fc2.com/arduino/lab/millis/</div>
 <div class="line">  if (is_scroll &amp;&amp; (millis() - prev_time &gt; SCROLL_INTERVAL)) {</div>
-<div class="line">    updateScr(image_h_shift, IMAGE_V_SHIFT, true);</div>
-<div class="line">    image_h_shift++;</div>
 <div class="line">    prev_time += SCROLL_INTERVAL;</div>
-<div class="line">    if (image_h_shift &gt; IMAGE_H_SIZE) {</div>
-<div class="line">      image_h_shift = 0;</div>
+<div class="line">    if (is_enabled) {</div>
+<div class="line">      updateScr(image_h_shift, IMAGE_V_SHIFT, true);</div>
+<div class="line">      image_h_shift++;</div>
+<div class="line">      if (image_h_shift &gt; IMAGE_H_SIZE) {</div>
+<div class="line">        image_h_shift = 0;</div>
+<div class="line">      }</div>
 <div class="line">    }</div>
 <div class="line">    DebugPlainPrint1(&quot;h_shift:&quot;);</div>
 <div class="line">    DebugPlainPrintln1(image_h_shift);</div>

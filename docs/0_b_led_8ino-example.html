@@ -73,6 +73,7 @@ $(function() {
 <div class="line">#define MAX_LIGHT_8BIT  (0xFF)</div>
 <div class="line">#define MAX_LIGHT_16BIT (F_CPU / LED_HZ)</div>
 <div class="line">#define DEFAULT_LIGHT   (0)</div>
+<div class="line">#define DEFAULT_EN      (false)</div>
 <div class="line">#if defined(BOARD_REV) &amp;&amp; (BOARD_REV &gt;= BOARD_REV_FP1_DVT)</div>
 <div class="line">#  define MAX_LIGHT_R (6234)           // For 5500K white</div>
 <div class="line">#  define MAX_LIGHT_G (6909)           // For 5500K white</div>
@@ -96,19 +97,27 @@ $(function() {
 <div class="line">#define N_RGB     (3)</div>
 <div class="line">#define EXP_GAMMA ((float)2.2)</div>
 <div class="line"> </div>
-<div class="line">const uint8_t  USER_FW_MAJOR_VER = 0x00;</div>
-<div class="line">const uint8_t  USER_FW_MINOR_VER = 0x12;</div>
+<div class="line">enum dcInfoNumber_t {</div>
+<div class="line">  nEnabled = 1,</div>
+<div class="line">  nRed,</div>
+<div class="line">  nGreen,</div>
+<div class="line">  nBlue,</div>
+<div class="line">};</div>
+<div class="line"> </div>
+<div class="line">const uint8_t  USER_FW_MAJOR_VER = 0x01;</div>
+<div class="line">const uint8_t  USER_FW_MINOR_VER = 0x02;</div>
 <div class="line">const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) &lt;&lt; 8) + ((uint16_t)(USER_FW_MINOR_VER)));</div>
 <div class="line">const uint32_t BRANCH_TYPE       = 0x0000000B; // Branch index number on vivitainc/ViviParts.git</div>
 <div class="line"> </div>
 <div class="line">const dcInfo_t dcInfo[] = {</div>
 <div class="line">  // {group_no, data_nature, data_type, data_min, data_max}</div>
+<div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true, DEFAULT_EN}, // 1: Enabled</div>
 <div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_R,</div>
-<div class="line">   DEFAULT_LIGHT}, // 1: Red</div>
+<div class="line">   DEFAULT_LIGHT}, // 2: Red</div>
 <div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_G,</div>
-<div class="line">   DEFAULT_LIGHT}, // 2: Green</div>
+<div class="line">   DEFAULT_LIGHT}, // 3: Green</div>
 <div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, 0, MAX_LIGHT_B,</div>
-<div class="line">   DEFAULT_LIGHT}, // 3: Blue</div>
+<div class="line">   DEFAULT_LIGHT}, // 4: Blue</div>
 <div class="line">};</div>
 <div class="line"> </div>
 <div class="line">static const int pins[N_RGB] = {</div>
@@ -122,6 +131,8 @@ $(function() {
 <div class="line">  DEFAULT_LIGHT,</div>
 <div class="line">  DEFAULT_LIGHT,</div>
 <div class="line">};</div>
+<div class="line"> </div>
+<div class="line">static bool enabled = DEFAULT_EN;</div>
 <div class="line"> </div>
 <div class="line">static inline void analogWrite_(const int pin, const uint16_t value) {</div>
 <div class="line">  const uint16_t max_value =</div>
@@ -172,9 +183,11 @@ $(function() {
 <div class="line">  }</div>
 <div class="line">}</div>
 <div class="line"> </div>
-<div class="line">static inline void analogWriteGamma(const uint16_t *rgb_in) {</div>
+<div class="line">static inline void analogWriteGamma(const uint16_t *rgb_in, const bool enabled_) {</div>
 <div class="line">  uint16_t rgb_out[N_RGB] = {};</div>
-<div class="line">  correctGamma(rgb_in, rgb_out);</div>
+<div class="line">  if (enabled_) {</div>
+<div class="line">    correctGamma(rgb_in, rgb_out);</div>
+<div class="line">  }</div>
 <div class="line">  for (uint8_t i = 0; i &lt; N_RGB; i++) {</div>
 <div class="line">    analogWrite_(pins[i], rgb_out[i]);</div>
 <div class="line">  }</div>
@@ -202,7 +215,7 @@ $(function() {
 <div class="line">  TCCR2A = bit(COM2B1) | bit(WGM21) | bit(WGM20); // no inverting, OC2B only connected, fast PWM, TOP=0xFF</div>
 <div class="line">  TCCR2B = bit(CS21); // clk/8 prescaling for about 4kHz higher frequency than another 16bit timers</div>
 <div class="line"> </div>
-<div class="line">  analogWriteGamma(lights);</div>
+<div class="line">  analogWriteGamma(lights, enabled);</div>
 <div class="line">}</div>
 <div class="line"> </div>
 <div class="line">void loop() {</div>
@@ -212,20 +225,35 @@ $(function() {
 <div class="line"> </div>
 <div class="line">  for (uint8_t i = 0; i &lt; cnt.scaler; i++) {</div>
 <div class="line">    const ScalerData_t scaler = Vivicore.read();</div>
-<div class="line">    if (scaler.success &amp;&amp; (0 &lt; scaler.dc_n) &amp;&amp; (scaler.dc_n &lt;= N_RGB)) {</div>
-<div class="line">      const uint8_t rgb = scaler.dc_n - 1;</div>
-<div class="line">      lights[rgb]       = static_cast&lt;uint16_t&gt;(scaler.data);</div>
+<div class="line">    if (scaler.success) {</div>
+<div class="line">      switch (scaler.dc_n) {</div>
+<div class="line">      case nEnabled:</div>
+<div class="line">        enabled = static_cast&lt;bool&gt;(scaler.data);</div>
+<div class="line">        break;</div>
+<div class="line">      case nRed:</div>
+<div class="line">        lights[0] = static_cast&lt;uint16_t&gt;(scaler.data);</div>
+<div class="line">        break;</div>
+<div class="line">      case nGreen:</div>
+<div class="line">        lights[1] = static_cast&lt;uint16_t&gt;(scaler.data);</div>
+<div class="line">        break;</div>
+<div class="line">      case nBlue:</div>
+<div class="line">        lights[2] = static_cast&lt;uint16_t&gt;(scaler.data);</div>
+<div class="line">        break;</div>
+<div class="line">      default:</div>
+<div class="line">        break;</div>
+<div class="line">      }</div>
+<div class="line"> </div>
+<div class="line">      DebugPlainPrint0(&quot;dc_n:&quot;);</div>
+<div class="line">      DebugPlainPrint0(scaler.dc_n);</div>
+<div class="line">      DebugPlainPrint0(&quot;, success:&quot;);</div>
+<div class="line">      DebugPlainPrint0(scaler.success);</div>
+<div class="line">      DebugPlainPrint0(&quot;, data:&quot;);</div>
+<div class="line">      DebugPlainPrintln0(scaler.data);</div>
 <div class="line">    }</div>
-<div class="line">    DebugPlainPrint0(&quot;dc_n:&quot;);</div>
-<div class="line">    DebugPlainPrint0(scaler.dc_n);</div>
-<div class="line">    DebugPlainPrint0(&quot;, success:&quot;);</div>
-<div class="line">    DebugPlainPrint0(scaler.success);</div>
-<div class="line">    DebugPlainPrint0(&quot;, data:&quot;);</div>
-<div class="line">    DebugPlainPrintln0(scaler.data);</div>
 <div class="line">  }</div>
 <div class="line"> </div>
 <div class="line">  if (cnt.scaler &gt; 0) {</div>
-<div class="line">    analogWriteGamma(lights);</div>
+<div class="line">    analogWriteGamma(lights, enabled);</div>
 <div class="line">  }</div>
 <div class="line">}</div>
 </div><!-- fragment --> </div><!-- contents -->

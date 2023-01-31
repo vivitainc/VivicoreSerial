@@ -73,17 +73,39 @@ Requisites</h1>
 <p>The below table shows the corresponding Arduino IDE version <a class="el" href="class_vivicore_serial.html" title="This class is for branch to talk with core.">VivicoreSerial</a> library requires. Refer to <a href="#how-to-setup">How to setup</a> to install Arduino IDE and configure the board and library manager.</p>
 <table class="markdownTable">
 <tr class="markdownTableHead">
-<th class="markdownTableHeadNone">Arduino IDE version   </th><th class="markdownTableHeadNone"><a class="el" href="class_vivicore_serial.html" title="This class is for branch to talk with core.">VivicoreSerial</a> version managed on Library Manager   </th><th class="markdownTableHeadNone"><code>LIBRARY_VER_BUILD_NO</code> defined on <code><a class="el" href="_vivicore_serial_version_8h.html" title="VivicoreSerial library version definition.">VivicoreSerialVersion.h</a></code>   </th><th class="markdownTableHeadNone">Description    </th></tr>
+<th class="markdownTableHeadNone">Arduino IDE version   </th><th class="markdownTableHeadNone">Arduino AVR Boards   </th><th class="markdownTableHeadNone"><a class="el" href="class_vivicore_serial.html" title="This class is for branch to talk with core.">VivicoreSerial</a> version managed on Library Manager   </th><th class="markdownTableHeadNone"><code>LIBRARY_VER_BUILD_NO</code> defined on <code><a class="el" href="_vivicore_serial_version_8h.html" title="VivicoreSerial library version definition.">VivicoreSerialVersion.h</a></code>   </th><th class="markdownTableHeadNone">Description    </th></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone">1.8.12 (Required)   </td><td class="markdownTableBodyNone">1.0.0 or later   </td><td class="markdownTableBodyNone">0x0005 or later   </td><td class="markdownTableBodyNone"><ul>
+<td class="markdownTableBodyNone">2.0.0 or later   </td><td class="markdownTableBodyNone">1.8.2 (Required)   </td><td class="markdownTableBodyNone">1.0.0 or later   </td><td class="markdownTableBodyNone">0x0005 or later   </td><td class="markdownTableBodyNone"><ul>
 <li>
-64bit compatibility with upcoming macOS Catalina</li>
+64bit compatibility</li>
+<li>
+Arduino AVR Boards 1.8.2<ul>
+<li>
+avr-gcc 7.3.0-atmel3.6.1-arduino5</li>
+</ul>
+</li>
+<li>
+Arduino AVR Boards 1.8.3, 1.8.4<ul>
+<li>
+avr-gcc 7.3.0-atmel3.6.1-arduino7</li>
+<li>
+Wire library with timeout function</li>
+</ul>
+</li>
+</ul>
+</td></tr>
+<tr class="markdownTableRowEven">
+<td class="markdownTableBodyNone">1.8.12   </td><td class="markdownTableBodyNone">1.8.2 (Included in IDE)   </td><td class="markdownTableBodyNone">1.0.0 or later   </td><td class="markdownTableBodyNone">0x0005 or later   </td><td class="markdownTableBodyNone"><ul>
+<li>
+64bit compatibility</li>
 <li>
 avr-gcc 7.3.0-atmel3.6.1-arduino5</li>
 </ul>
 </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone">1.8.7   </td><td class="markdownTableBodyNone">-   </td><td class="markdownTableBodyNone">0x0004 or before   </td><td class="markdownTableBodyNone"><ul>
+<tr class="markdownTableRowOdd">
+<td class="markdownTableBodyNone">1.8.7   </td><td class="markdownTableBodyNone">1.6.23 (Included in IDE)   </td><td class="markdownTableBodyNone">-   </td><td class="markdownTableBodyNone">0x0004 or before   </td><td class="markdownTableBodyNone"><ul>
+<li>
+32bit compatibility</li>
 <li>
 avr-gcc 5.4.0</li>
 </ul>
@@ -125,35 +147,49 @@ THESE FONTS ARE PROVIDED "AS IS" WITHOUT WARRANTY.    </td></tr>
 How to setup</h1>
 <p>This instruction describes how to setup Arduino IDE to build VIVIWARE Cell Custom sketch and upload it to the board.</p>
 <h2><a class="anchor" id="autotoc_md4"></a>
-Install and configure Arduino IDE</h2>
+Install Arduino IDE</h2>
 <ol type="1">
 <li>Download and install the required Arduino IDE version written on <a href="#requisites">requisites</a> which is available on <a href="https://www.arduino.cc/en/Main/Software">Arduino official site top</a> or <a href="https://www.arduino.cc/en/Main/OldSoftwareReleases#previous">Previous IDE Releases</a>.<ul>
 <li>For Windows, <b>use Windows Installer exe file but not zip file</b></li>
-<li>On Board Manager in Arduino IDE, <b>do not update built-in packages (e.g. Arduino AVR Boards)</b> to avoid unexpected built result mismatch. Use default build-in packages bundled with the required Arduino IDE version.</li>
 </ul>
 </li>
+</ol>
+<h2><a class="anchor" id="autotoc_md5"></a>
+Configure Arduino IDE</h2>
+<ol type="1">
 <li>Open <code>Preferences</code> of Arduino IDE.</li>
 <li>Add URL <code><a href="https://raw.githubusercontent.com/vivitainc/custom_cell_boards/master/package_viviware_index.json">https://raw.githubusercontent.com/vivitainc/custom_cell_boards/master/package_viviware_index.json</a></code> into <code>Additional Boards Manager URLs</code> text box, and press <code>OK</code> button.</li>
 </ol>
-<h2><a class="anchor" id="autotoc_md5"></a>
+<h2><a class="anchor" id="autotoc_md6"></a>
 Setup Boards Manager</h2>
 <ol type="1">
 <li>Open Arduino IDE and the menu <code>Tools</code> &gt; <code>Board:</code> &gt; <code>Boards Manager...</code>.</li>
-<li>Select <code>Type</code> of <code>All</code> or <code>Contributed</code>, enter <code>viviware</code> into text box, and find <code>VIVIWARE Cell Custom Boards</code>.</li>
-<li>Select the latest version of <code>VIVIWARE Cell Custom Boards</code> (e.g. <code>1.0.1</code>), and press <code>Install</code> button.</li>
+<li>Enter <code>arduino</code> into text box.<ul>
+<li>Find <code>Arduino AVR Boards</code>.</li>
+<li>Select the required version written on <a href="#requisites">requisites</a>, and press <code>Install</code> button. <b>Do not use another version to avoid unexpected built result mismatch.</b></li>
 <li>After a while, check the status <code>INSTALLED</code> shown on right side of the version.</li>
+</ul>
+</li>
+</ol>
+<ol type="1">
+<li>Enter <code>viviware</code> into text box.<ul>
+<li>Find <code>VIVIWARE Cell Custom Boards</code>.</li>
+<li>Select the latest version (e.g. <code>6.3.0</code>), and press <code>Install</code> button.</li>
+<li>After a while, check the status <code>INSTALLED</code> shown on right side of the version.</li>
+</ul>
+</li>
 <li>Close <code>Boards Manager</code> by pressing <code>Close</code> button.</li>
 </ol>
-<h2><a class="anchor" id="autotoc_md6"></a>
+<h2><a class="anchor" id="autotoc_md7"></a>
 Setup Library Manager</h2>
 <ol type="1">
 <li>Open Arduino IDE and the menu <code>Sketch</code> &gt; <code>Include Library</code> &gt; <code>Manage Libraries...</code>.</li>
 <li>Select <code>Type</code> of <code>All</code> or <code>Contributed</code>, select <code>Topic</code> of <code>All</code> or <code>Communication</code>, and enter <code><a class="el" href="class_vivicore_serial.html" title="This class is for branch to talk with core.">VivicoreSerial</a></code> into text box, and find <code><a class="el" href="class_vivicore_serial.html" title="This class is for branch to talk with core.">VivicoreSerial</a></code> library.</li>
-<li>Select the latest version of <code><a class="el" href="class_vivicore_serial.html" title="This class is for branch to talk with core.">VivicoreSerial</a></code> (e.g. <code>1.0.0</code>), and press <code>Install</code> button.</li>
+<li>Select the latest version of <code><a class="el" href="class_vivicore_serial.html" title="This class is for branch to talk with core.">VivicoreSerial</a></code> (e.g. <code>3.2.0+07010014</code>), and press <code>Install</code> button.</li>
 <li>After a while, check the status <code>INSTALLED</code> shown on right side of the version.</li>
 <li>Close <code>Library Manager</code> by pressing <code>Close</code> button.</li>
 </ol>
-<h2><a class="anchor" id="autotoc_md7"></a>
+<h2><a class="anchor" id="autotoc_md8"></a>
 Build and upload sketch</h2>
 <ol type="1">
 <li>Open new sketch on Arduino IDE.</li>
@@ -163,14 +199,21 @@ Build and upload sketch</h2>
 <li>Select port connected to VIVIWARE Cell Custom board in the menu <code>Tools</code> &gt; <code>Port:</code>.</li>
 <li>Press <code>Upload</code> button.</li>
 </ol>
-<h1><a class="anchor" id="autotoc_md8"></a>
+<h1><a class="anchor" id="autotoc_md9"></a>
 Only for VivicoreSerial library developer</h1>
 <p>Refer to <a href="https://github.com/vivitainc/branch_cell/blob/develop/README.md">README</a> for library developer.</p>
-<h1><a class="anchor" id="autotoc_md9"></a>
+<h1><a class="anchor" id="autotoc_md10"></a>
 VivicoreSerial version history on Library Manager</h1>
 <ul>
+<li>3.2.0 : Add features or fix issues as the following<ul>
+<li>Support VIVIWARE Cell Custom v4 board with <a href="https://github.com/vivitainc/custom_cell_boards/releases/tag/6.3.0">custom_cell_board 6.3.0</a> or later</li>
+<li>Support VIVIWARE Cell Custom v3 board as DeprecatedCustom</li>
+<li>Drop supporting VIVIWARE Cell Custom v2, v1 board</li>
+</ul>
+</li>
 <li>3.1.0 : Add features or fix issues as the following<ul>
 <li>Support VIVIWARE Cell Custom v3 board with <a href="https://github.com/vivitainc/custom_cell_boards/releases/tag/6.2.0">custom_cell_board 6.2.0</a> or later</li>
+<li>Support VIVIWARE Cell Custom v2, v1 board as DeprecatedCustom</li>
 <li>Support VIVIWARE Cell UserBranch with <a href="https://github.com/vivitainc/custom_cell_boards/releases/tag/6.1.0">custom_cell_board 6.1.0</a> or later</li>
 </ul>
 </li>

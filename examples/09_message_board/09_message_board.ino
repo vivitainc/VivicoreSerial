@@ -31,8 +31,8 @@
 
 const char *INITIAL_TEXT = "";
 
-const uint8_t  USER_FW_MAJOR_VER = 0x00;
-const uint8_t  USER_FW_MINOR_VER = 0x12;
+const uint8_t  USER_FW_MAJOR_VER = 0x01;
+const uint8_t  USER_FW_MINOR_VER = 0x01;
 const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) << 8) + ((uint16_t)(USER_FW_MINOR_VER)));
 const uint32_t BRANCH_TYPE       = 0x00000009;
 
@@ -292,7 +292,8 @@ void setup() {
 
 void loop() {
   static uint8_t       charbuffer[DISP_BUF_SIZE] = {};
-  static bool          is_scroll                 = 0;
+  static bool          is_scroll                 = false;
+  static bool          is_enabled                = true;
   static int           image_h_shift             = 0;
   static unsigned long prev_time                 = 0;
   const AvailableNum_t recv_cnt                  = Vivicore.available();
@@ -314,7 +315,8 @@ void loop() {
     }
     DebugPlainPrintln1();
 
-    is_scroll = ((raw.data[0] & 0x01) != 0);
+    is_scroll  = ((raw.data[0] & 0x01) != 0);
+    is_enabled = ((raw.data[0] & 0x02) != 0);
     for (uint8_t char_idx = 0; char_idx < DISP_BUF_SIZE; char_idx++) {
       charbuffer[char_idx] = (char_idx < raw.data_len) ? raw.data[char_idx + 1] : ' ';
     }
@@ -322,17 +324,19 @@ void loop() {
     image_h_shift = 0;
     prev_time     = millis();
 
-    convCharImage(charbuffer);
+    convCharImage(is_enabled ? charbuffer : reinterpret_cast<const uint8_t *>(INITIAL_TEXT));
     updateScr(image_h_shift, IMAGE_V_SHIFT, true);
   }
 
   // Dont care about millis overflows https://garretlab.web.fc2.com/arduino/lab/millis/
   if (is_scroll && (millis() - prev_time > SCROLL_INTERVAL)) {
-    updateScr(image_h_shift, IMAGE_V_SHIFT, true);
-    image_h_shift++;
     prev_time += SCROLL_INTERVAL;
-    if (image_h_shift > IMAGE_H_SIZE) {
-      image_h_shift = 0;
+    if (is_enabled) {
+      updateScr(image_h_shift, IMAGE_V_SHIFT, true);
+      image_h_shift++;
+      if (image_h_shift > IMAGE_H_SIZE) {
+        image_h_shift = 0;
+      }
     }
     DebugPlainPrint1("h_shift:");
     DebugPlainPrintln1(image_h_shift);

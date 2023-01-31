@@ -78,24 +78,46 @@ $(function() {
 <div class="line">#define LOOP_INTERVAL        (10)   // Unit: ms.</div>
 <div class="line">#define DURATION_BATTERY_LOW (1000) // Unit: ms. Alert battery low to Core if the state is kept in this duration</div>
 <div class="line"> </div>
-<div class="line">#define MOTOR_HZ      (8000)</div>
-<div class="line">#define MAX_DUTY_CNT  (F_CPU / MOTOR_HZ) // 1000</div>
-<div class="line">#define MAX_SPEED     (8000)             // Keep min/max spec same as version 0x0011</div>
-<div class="line">#define DEFAULT_SPEED (0)</div>
-<div class="line">#define CHANNELS      (2)</div>
+<div class="line">#define MOTOR_HZ        (8000)</div>
+<div class="line">#define MAX_DUTY_CNT    (F_CPU / MOTOR_HZ) // 1000</div>
+<div class="line">#define MAX_SPEED       (8000)             // Keep min/max spec same as version 0x0011</div>
+<div class="line">#define DEFAULT_SPEED   (0)</div>
+<div class="line">#define DEFAULT_EN      (false)</div>
+<div class="line">#define DEFAULT_REVERSE (false) // Counter-clockwise</div>
+<div class="line">#define CHANNELS        (2)</div>
+<div class="line">#define INVALID_CHANNEL (CHANNELS)</div>
 <div class="line"> </div>
-<div class="line">const uint8_t  USER_FW_MAJOR_VER = 0x00;</div>
-<div class="line">const uint8_t  USER_FW_MINOR_VER = 0x13;</div>
+<div class="line">enum dcInfoNumber_t {</div>
+<div class="line">  nMotor1Enabled = 1,</div>
+<div class="line">  nMotor1Reverse,</div>
+<div class="line">  nMotor1Speed,</div>
+<div class="line">  nMotor2Enabled,</div>
+<div class="line">  nMotor2Reverse,</div>
+<div class="line">  nMotor2Speed,</div>
+<div class="line">  nBatteryLow,</div>
+<div class="line">};</div>
+<div class="line"> </div>
+<div class="line">const uint8_t  USER_FW_MAJOR_VER = 0x01;</div>
+<div class="line">const uint8_t  USER_FW_MINOR_VER = 0x01;</div>
 <div class="line">const uint16_t USER_FW_VER       = (((uint16_t)(USER_FW_MAJOR_VER) &lt;&lt; 8) + ((uint16_t)(USER_FW_MINOR_VER)));</div>
 <div class="line">const uint32_t BRANCH_TYPE       = 0x00000002; // Branch index number on vivitainc/ViviParts.git</div>
 <div class="line"> </div>
-<div class="line">const dcInfo_t dcInfo[] = {</div>
+<div class="line">const dcInfo_t dc_info[] = {</div>
 <div class="line">  // {group_no, data_nature, data_type, data_min, data_max}</div>
+<div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true,</div>
+<div class="line">   DEFAULT_EN}, // 1: Motor1 ON/OFF</div>
+<div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true,</div>
+<div class="line">   DEFAULT_REVERSE}, // 2: Motor1 Reverse</div>
 <div class="line">  {DcGroup_t::DC_GROUP_1, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, -1 * MAX_SPEED, MAX_SPEED,</div>
-<div class="line">   DEFAULT_SPEED}, // 1: Motor1 Control</div>
+<div class="line">   DEFAULT_SPEED}, // 3: Motor1 Speed</div>
+<div class="line">  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true,</div>
+<div class="line">   DEFAULT_EN}, // 4: Motor2 ON/OFF</div>
+<div class="line">  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_BOOLEAN, false, true,</div>
+<div class="line">   DEFAULT_REVERSE}, // 5: Motor2 Reverse</div>
 <div class="line">  {DcGroup_t::DC_GROUP_2, DcNature_t::DC_NATURE_IN, DcType_t::DC_TYPE_ANALOG_2BYTES, -1 * MAX_SPEED, MAX_SPEED,</div>
-<div class="line">   DEFAULT_SPEED},                                                                              // 2: Motor2 Control</div>
-<div class="line">  {DcGroup_t::DC_GROUP_FOR_SYSTEM, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, 0, 1}, // 3: Is Battery Low</div>
+<div class="line">   DEFAULT_SPEED}, // 6: Motor2 Speed</div>
+<div class="line">  {DcGroup_t::DC_GROUP_FOR_SYSTEM, DcNature_t::DC_NATURE_OUT, DcType_t::DC_TYPE_BOOLEAN, false,</div>
+<div class="line">   true}, // 7: Is Battery Low</div>
 <div class="line">};</div>
 <div class="line"> </div>
 <div class="line">const uint8_t dir_pins[CHANNELS] = {</div>
@@ -106,6 +128,16 @@ $(function() {
 <div class="line">  MOTOR1_SPEED_PIN,</div>
 <div class="line">  MOTOR2_SPEED_PIN,</div>
 <div class="line">};</div>
+<div class="line"> </div>
+<div class="line">static inline uint8_t mapDcNumberToChannel(const uint8_t dc_n) {</div>
+<div class="line">  if (nMotor1Enabled &lt;= dc_n &amp;&amp; dc_n &lt;= nMotor1Speed) {</div>
+<div class="line">    return 0;</div>
+<div class="line">  } else if (nMotor2Enabled &lt;= dc_n &amp;&amp; dc_n &lt;= nMotor2Speed) {</div>
+<div class="line">    return 1;</div>
+<div class="line">  }</div>
+<div class="line"> </div>
+<div class="line">  return INVALID_CHANNEL;</div>
+<div class="line">}</div>
 <div class="line"> </div>
 <div class="line">static inline void analogWrite_(const uint8_t pin, const uint16_t value) {</div>
 <div class="line">  const uint16_t mappedValue = map(value, 0, MAX_SPEED, 0, MAX_DUTY_CNT);</div>
@@ -156,7 +188,7 @@ $(function() {
 <div class="line"> </div>
 <div class="line">    if (shouldNotify) {</div>
 <div class="line">      prevBatteryLow = isBatteryLow;</div>
-<div class="line">      Vivicore.write(3, isBatteryLow); // 3: Is Battery Low</div>
+<div class="line">      Vivicore.write(nBatteryLow, isBatteryLow);</div>
 <div class="line">    }</div>
 <div class="line"> </div>
 <div class="line">    Vivicore.flush();</div>
@@ -169,7 +201,7 @@ $(function() {
 <div class="line">}</div>
 <div class="line"> </div>
 <div class="line">void setup() {</div>
-<div class="line">  Vivicore.begin(BRANCH_TYPE, USER_FW_VER, dcInfo, countof(dcInfo), MIN_LIBRARY_VER_BUILD_NO);</div>
+<div class="line">  Vivicore.begin(BRANCH_TYPE, USER_FW_VER, dc_info, countof(dc_info), MIN_LIBRARY_VER_BUILD_NO);</div>
 <div class="line"> </div>
 <div class="line">  digitalWrite(BATTERY_ALERT_RESET_PIN, HIGH);</div>
 <div class="line">  pinMode(BATTERY_ALERT_RESET_PIN, OUTPUT);</div>
@@ -193,14 +225,26 @@ $(function() {
 <div class="line"> </div>
 <div class="line">  for (uint8_t ch = 0; ch &lt; CHANNELS; ch++) {</div>
 <div class="line">    setDirection(dir_pins[ch], DEFAULT_SPEED);</div>
-<div class="line">    analogWrite_(speed_pins[ch], DEFAULT_SPEED);</div>
+<div class="line">    analogWrite_(speed_pins[ch], (uint16_t)abs(DEFAULT_SPEED));</div>
 <div class="line">  }</div>
 <div class="line">}</div>
 <div class="line"> </div>
 <div class="line">void loop() {</div>
-<div class="line">  static int16_t prev_speeds[CHANNELS] = {</div>
+<div class="line">  static int16_t cur_velocity[CHANNELS] = {</div>
 <div class="line">    DEFAULT_SPEED,</div>
 <div class="line">    DEFAULT_SPEED,</div>
+<div class="line">  };</div>
+<div class="line">  static int16_t cur_speeds[CHANNELS] = {</div>
+<div class="line">    DEFAULT_SPEED,</div>
+<div class="line">    DEFAULT_SPEED,</div>
+<div class="line">  };</div>
+<div class="line">  static bool cur_enabled[CHANNELS] = {</div>
+<div class="line">    DEFAULT_EN,</div>
+<div class="line">    DEFAULT_EN,</div>
+<div class="line">  };</div>
+<div class="line">  static bool cur_reverse[CHANNELS] = {</div>
+<div class="line">    DEFAULT_REVERSE,</div>
+<div class="line">    DEFAULT_REVERSE,</div>
 <div class="line">  };</div>
 <div class="line">  const AvailableNum_t cnt = Vivicore.available();</div>
 <div class="line"> </div>
@@ -210,23 +254,49 @@ $(function() {
 <div class="line"> </div>
 <div class="line">  for (uint8_t i = 0; i &lt; cnt.scaler; i++) {</div>
 <div class="line">    const ScalerData_t scaler = Vivicore.read();</div>
-<div class="line">    const int16_t      speed  = static_cast&lt;int16_t&gt;(scaler.data);</div>
-<div class="line"> </div>
-<div class="line">    if (scaler.success &amp;&amp; (0 &lt; scaler.dc_n) &amp;&amp; (scaler.dc_n &lt;= CHANNELS)) {</div>
-<div class="line">      const uint8_t ch = scaler.dc_n - 1;</div>
-<div class="line">      if (speed != prev_speeds[ch]) {</div>
-<div class="line">        prev_speeds[ch] = speed;</div>
-<div class="line">        setDirection(dir_pins[ch], speed);</div>
-<div class="line">        analogWrite_(speed_pins[ch], (uint16_t)abs(speed));</div>
-<div class="line">      }</div>
-<div class="line">    }</div>
 <div class="line"> </div>
 <div class="line">    DebugPlainPrint0(&quot;success:&quot;);</div>
 <div class="line">    DebugPlainPrint0(scaler.success);</div>
-<div class="line">    DebugPlainPrint0(&quot;, speed&quot;);</div>
-<div class="line">    DebugPlainPrint0(scaler.dc_n);</div>
-<div class="line">    DebugPlainPrint0(&quot;:&quot;);</div>
-<div class="line">    DebugPlainPrintln0(speed);</div>
+<div class="line"> </div>
+<div class="line">    if (scaler.success) {</div>
+<div class="line">      const uint8_t ch = mapDcNumberToChannel(scaler.dc_n);</div>
+<div class="line"> </div>
+<div class="line">      if (ch &lt; CHANNELS) {</div>
+<div class="line">        switch (scaler.dc_n) {</div>
+<div class="line">        case nMotor1Enabled:</div>
+<div class="line">        case nMotor2Enabled:</div>
+<div class="line">          cur_enabled[ch] = static_cast&lt;bool&gt;(scaler.data);</div>
+<div class="line">          break;</div>
+<div class="line">        case nMotor1Reverse:</div>
+<div class="line">        case nMotor2Reverse:</div>
+<div class="line">          cur_reverse[ch] = static_cast&lt;bool&gt;(scaler.data);</div>
+<div class="line">          break;</div>
+<div class="line">        case nMotor1Speed:</div>
+<div class="line">        case nMotor2Speed:</div>
+<div class="line">          cur_speeds[ch] = static_cast&lt;int16_t&gt;(scaler.data);</div>
+<div class="line">          break;</div>
+<div class="line">        default:</div>
+<div class="line">          break;</div>
+<div class="line">        }</div>
+<div class="line"> </div>
+<div class="line">        const int16_t velocity = (cur_enabled[ch] ? cur_speeds[ch] : 0) * (cur_reverse[ch] ? -1 : 1);</div>
+<div class="line">        if (velocity != cur_velocity[ch]) {</div>
+<div class="line">          cur_velocity[ch] = velocity;</div>
+<div class="line">          setDirection(dir_pins[ch], velocity);</div>
+<div class="line">          analogWrite_(speed_pins[ch], (uint16_t)abs(velocity));</div>
+<div class="line">        }</div>
+<div class="line"> </div>
+<div class="line">        DebugPlainPrint0(&quot;, speed&quot;);</div>
+<div class="line">        DebugPlainPrint0(scaler.dc_n);</div>
+<div class="line">        DebugPlainPrint0(&quot;:&quot;);</div>
+<div class="line">        DebugPlainPrint0(velocity);</div>
+<div class="line">      } else {</div>
+<div class="line">        DebugPlainPrint0(&quot;, invalid channel:&quot;);</div>
+<div class="line">        DebugPlainPrint0(ch);</div>
+<div class="line">      }</div>
+<div class="line">    }</div>
+<div class="line"> </div>
+<div class="line">    DebugPlainPrintln0(&quot;&quot;);</div>
 <div class="line">  }</div>
 <div class="line">}</div>
 </div><!-- fragment --> </div><!-- contents -->

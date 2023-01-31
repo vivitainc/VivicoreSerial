@@ -320,12 +320,16 @@ BranchCommandRes_t VivicoreSerial::processCommand(const BranchCommand_t cmd) {
     switch (_cmd_params[0]) {
     case BCMDPARAM_READ_ENCODED_DATA:
       if (!_is_read_polling) {
+#if (BOARD_TYPE == BOARD_TYPE_DEPRECATED_CUSTOM)
+        // Do nothing
+#else
         // First BCMDPARAM_READ_ENCODED_DATA Request CMD
         if (_my_branch_id < NUM_MAX_SLAVE) {
           // Supply power only if my Branch ID is less than NUM_MAX_SLAVE
-          PORTC = PORTC | B00001000; // A3 PC3 to High Start supplying power
-                                     //  digitalWrite(A3,HIGH);
+          // Equivalent to digitalWrite(PIN_VIVIWARE_EN_PWR,HIGH);
+          VPARTS_EN_PWR_PORT |= _BV(VPARTS_EN_PWR_PIN);
         }
+#endif
         _is_dcdt_ok = true;
         DebugStringPrintln0("DCDT_OK");
       }
@@ -612,12 +616,8 @@ ISR(USART1_UDRE_vect)
     cbi(*(active_object->_ucsrb), active_object->_udrie);
     // delayMicroseconds(800);
     loop_until_bit_is_set(*(active_object->_ucsra), active_object->_txc);
-#if (BOARD_TYPE == BOARD_TYPE_CUSTOM)
-    PORTE &= ~_BV(PINE1); // digitalWrite(PIN_VIVIWARE_EN_TX, LOW);
-#else
-    PORTB &= ~_BV(PINB0); // digitalWrite(PIN_VIVIWARE_EN_TX, LOW);
-#endif
-    active_object->clearTransmitting(); // Set transmitting to false
+    VPARTS_EN_TX_PORT &= ~_BV(VPARTS_EN_TX_PIN); // digitalWrite(PIN_VIVIWARE_EN_TX, LOW);
+    active_object->clearTransmitting();          // Set transmitting to false
   } else {
     // There is more data in the output buffer. Send the next byte
     const unsigned char c           = active_object->_tx_buffer->buffer[active_object->_tx_buffer->tail];
@@ -667,7 +667,6 @@ VivicoreSerial::VivicoreSerial(volatile uint8_t *ubrrh, volatile uint8_t *ubrrl,
 #endif
   if (_is_passthru_mode) {
     // Supply power
-    // PORTC = PORTC | B00001000; // A3 PC3 to High Start supplying power
     digitalWrite(PIN_VIVIWARE_EN_PWR, HIGH);
   } else {
     digitalWrite(PIN_VIVIWARE_EN_PWR, LOW);
@@ -683,11 +682,15 @@ VivicoreSerial::~VivicoreSerial(void) {
 // Private Methods /////////////////////////////////////////////////////////////
 
 void VivicoreSerial::init() {
+#if (BOARD_TYPE != BOARD_TYPE_CUSTOM)
   pinMode(PIN_VIVIWARE_EN_RX, OUTPUT);
+#endif
   pinMode(PIN_VIVIWARE_EN_TX, OUTPUT);
   pinMode(PIN_VIVIWARE_DEBUG_LED, OUTPUT);
+#if (BOARD_TYPE != BOARD_TYPE_CUSTOM)
   digitalWrite(PIN_VIVIWARE_EN_RX, HIGH); // ALWAYS HIGH
-  digitalWrite(PIN_VIVIWARE_EN_TX, LOW);  // ONLY HIGH WHEN TRANSMITTING , TO REMOVE
+#endif
+  digitalWrite(PIN_VIVIWARE_EN_TX, LOW); // ONLY HIGH WHEN TRANSMITTING , TO REMOVE
 
   for (int i = 0; i < NUM_BRTYPE_BYTES; i++) {
     uint8_t brTypeDat = EEPROM.read(E2END - (NUM_BRTYPE_BYTES - i) + 1);
@@ -1101,11 +1104,7 @@ bool VivicoreSerial::isInFatalError(void) {
 }
 
 void VivicoreSerial::pushToTxRingBuffAndTransmit(const uint8_t *buffer, const uint8_t datalen) {
-#if (BOARD_TYPE == BOARD_TYPE_CUSTOM)
-  PORTE |= _BV(PINE1); // digitalWrite(PIN_VIVIWARE_EN_TX, HIGH);
-#else
-  PORTB |= _BV(PINB0); // digitalWrite(PIN_VIVIWARE_EN_TX, HIGH);
-#endif
+  VPARTS_EN_TX_PORT |= _BV(VPARTS_EN_TX_PIN); // digitalWrite(PIN_VIVIWARE_EN_TX, HIGH);
 
   setSyncBreak();
 
